@@ -22,7 +22,7 @@ class GeminiClient:
         self._current_key_index = 0
         self._client = None
         self._current_api_key = None
-        # Use gemini-2.5-flash-lite - latest stable model
+        # Default model - use gemini-2.5-flash-lite (latest stable model)
         self.model = "gemini-2.5-flash-lite"
         self._load_api_keys()
 
@@ -73,13 +73,16 @@ class GeminiClient:
             self._client = genai.Client(api_key=self.api_key)
         return self._client
 
-    def _generate_sync(self, prompt: str, temperature: float = 0.4, max_tokens: int = 512) -> str:
+    def _generate_sync(self, prompt: str, temperature: float = 0.4, max_tokens: int = 512, model: Optional[str] = None) -> str:
         """Generate with automatic API key rotation on failure - optimized for multi-key usage"""
         last_error = None
         total_keys = len(self._api_keys) if self._api_keys else 0
         
         if total_keys == 0:
             raise ValueError("No Gemini API keys configured")
+        
+        # Use provided model or default
+        model_name = model or self.model
         
         # Try all API keys with round-robin
         for attempt in range(total_keys):
@@ -97,27 +100,63 @@ class GeminiClient:
                     ),
                 ]
                 
-                # Use gemini-2.5-flash-lite directly (latest stable model)
-                logger.debug(f"Attempting with gemini-2.5-flash-lite (API key #{attempt + 1}/{total_keys})")
+                logger.debug(f"Attempting with {model_name} (API key #{attempt + 1}/{total_keys})")
                 config = types.GenerateContentConfig()
-                response = client.models.generate_content_stream(
-                    model="gemini-2.5-flash-lite",  # Latest stable model
-                    contents=contents,
-                    config=config,
-                )
                 
-                # Stream response to save memory
-                full_text = ""
-                for chunk in response:
-                    if chunk.text:
-                        full_text += chunk.text
+                # Validate model name - fallback to default if invalid
+                valid_models = ["gemini-2.5-flash-preview-image", "gemini-2.5-flash-lite", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+                if model_name and model_name not in valid_models:
+                    logger.warning(f"Model {model_name} may not be valid, using default: {self.model}")
+                    model_name = self.model
                 
-                logger.info(f"Successfully generated {len(full_text)} chars with API key #{attempt + 1}")
-                # Update current key index for next request (round-robin)
-                self._current_key_index = (self._current_key_index + attempt + 1) % total_keys
-                self._current_api_key = api_key
-                self._client = client
-                return full_text.strip()
+                # If using gemini-2.5-flash-preview-image, prepare fallback
+                fallback_model = "gemini-2.5-flash-lite" if model_name == "gemini-2.5-flash-preview-image" else None
+                
+                try:
+                    response = client.models.generate_content_stream(
+                        model=model_name,
+                        contents=contents,
+                        config=config,
+                    )
+                    
+                    # Stream response to save memory
+                    full_text = ""
+                    for chunk in response:
+                        if chunk.text:
+                            full_text += chunk.text
+                    
+                    logger.info(f"Successfully generated {len(full_text)} chars with {model_name} (API key #{attempt + 1})")
+                    # Update current key index for next request (round-robin)
+                    self._current_key_index = (self._current_key_index + attempt + 1) % total_keys
+                    self._current_api_key = api_key
+                    self._client = client
+                    return full_text.strip()
+                except Exception as model_error:
+                    error_msg = str(model_error).lower()
+                    # If model not found/invalid and we have fallback, try fallback
+                    if fallback_model and ("model" in error_msg or "not found" in error_msg or "invalid" in error_msg or "404" in error_msg):
+                        logger.warning(f"Model {model_name} failed, trying fallback {fallback_model}: {model_error}")
+                        try:
+                            response = client.models.generate_content_stream(
+                                model=fallback_model,
+                                contents=contents,
+                                config=config,
+                            )
+                            full_text = ""
+                            for chunk in response:
+                                if chunk.text:
+                                    full_text += chunk.text
+                            logger.info(f"Successfully generated {len(full_text)} chars with fallback {fallback_model} (API key #{attempt + 1})")
+                            self._current_key_index = (self._current_key_index + attempt + 1) % total_keys
+                            self._current_api_key = api_key
+                            self._client = client
+                            return full_text.strip()
+                        except Exception as fallback_error:
+                            # Fallback also failed, raise original error
+                            raise model_error from fallback_error
+                    else:
+                        # Not a model error or no fallback, re-raise
+                        raise
                 
             except Exception as e:
                 last_error = e
@@ -134,25 +173,58 @@ class GeminiClient:
         logger.error(f"All {total_keys} API keys failed. Last error: {last_error}")
         raise last_error or Exception("All Gemini API keys failed")
 
-    async def generate(self, prompt: str, temperature: float = 0.4, max_tokens: int = 512) -> str:
+    def _generate_image_sync(self, prompt: str, temperature: float = 0.4, max_tokens: int = 1024) -> str:
+        """Generate image illustration using gemini-2.5-flash-preview-image (with fallback to gemini-2.5-flash-lite)"""
+        # Use enhanced prompt for mathematical illustrations
+        enhanced_prompt = f"""Tạo một mô tả chi tiết về minh họa toán học dựa trên nội dung sau. 
+Hãy mô tả một hình ảnh minh họa rõ ràng, dễ hiểu cho học sinh THPT, bao gồm biểu đồ, hình vẽ, sơ đồ.
+
+Nội dung cần minh họa:
+{prompt}
+
+Yêu cầu mô tả:
+- Mô tả minh họa phải chính xác về mặt toán học, vật lý, hóa học
+- Mô tả biểu đồ, hình vẽ, sơ đồ chi tiết
+- Mô tả màu sắc rõ ràng, dễ phân biệt
+- Mô tả nhãn và chú thích rõ ràng
+- Phù hợp với trình độ THPT
+- Mô tả bằng văn bản chi tiết để có thể vẽ lại hoặc tạo hình ảnh"""
+        
+        # Try gemini-2.5-flash-preview-image first (better for diagrams/illustrations)
+        # Will automatically fallback to gemini-2.5-flash-lite if preview-image fails
+        return self._generate_sync(enhanced_prompt, temperature, max_tokens, model="gemini-2.5-flash-preview-image")
+
+    async def generate(self, prompt: str, temperature: float = 0.4, max_tokens: int = 512, model: Optional[str] = None) -> str:
         """
         Async wrapper for generation with caching and memory optimization
         
         Checks cache first, then generates if cache miss
         """
-        # Check cache first
-        cached_response = get_cached_response(prompt, temperature, max_tokens)
+        # Check cache first (include model in cache key)
+        cache_key = f"{prompt}|{temperature}|{max_tokens}|{model or self.model}"
+        cached_response = get_cached_response(cache_key, temperature, max_tokens)
         if cached_response:
             logger.info("Returning cached response")
             return cached_response
         
         # Cache miss - generate new response
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(_executor, self._generate_sync, prompt, temperature, max_tokens)
+        response = await loop.run_in_executor(_executor, self._generate_sync, prompt, temperature, max_tokens, model)
         
         # Cache the response
-        set_cached_response(prompt, temperature, max_tokens, response)
+        set_cached_response(cache_key, temperature, max_tokens, response)
         
+        return response
+
+    async def generate_image_illustration(self, prompt: str, temperature: float = 0.4, max_tokens: int = 1024) -> str:
+        """
+        Generate image illustration description using gemini-2.5-flash-lite
+        For mathematical content visualization (returns text description)
+        Falls back to default model if gemini-2.5-flash-lite fails
+        """
+        # Don't cache image generation (too dynamic)
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(_executor, self._generate_image_sync, prompt, temperature, max_tokens)
         return response
 
 

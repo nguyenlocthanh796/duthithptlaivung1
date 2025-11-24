@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { uploadMedia } from '../services/api'
-import { createPost } from '../services/firestore'
+import { uploadImage, uploadDocument } from '../services/storageService'
+import { createPost, createDocument } from '../services/firestore'
 import { useToast } from './Toast'
 
 export function PostComposer({ user }) {
@@ -47,24 +47,12 @@ export function PostComposer({ user }) {
 
       if (imageFile) {
         try {
-          const uploadResponse = await uploadMedia(imageFile)
-          
-          if (uploadResponse?.driveLink) {
-            imageUrl = uploadResponse.driveLink
-            success('Đã tải ảnh lên Google Drive thành công!')
-          } else if (uploadResponse?.uploaded === false) {
-            // Google Drive not available, but file was saved
-            showError('Google Drive chưa được cấu hình. File đã được lưu tạm nhưng chưa upload lên Drive. Vui lòng cấu hình credentials.json')
-            setLoading(false)
-            return
-          } else {
-            throw new Error('Không nhận được link từ server')
-          }
+          imageUrl = await uploadImage(imageFile)
+          success('Đã tải ảnh lên Firebase Storage thành công!')
         } catch (uploadError) {
           console.error('Error uploading image:', uploadError)
-          const errorMessage = uploadError.response?.data?.detail || 
-                              uploadError.message || 
-                              'Không thể tải ảnh lên. Vui lòng kiểm tra backend có đang chạy và CORS đã được cấu hình đúng.'
+          const errorMessage = uploadError.message || 
+                              'Không thể tải ảnh lên. Vui lòng kiểm tra kết nối và thử lại.'
           showError(errorMessage)
           setLoading(false)
           return
@@ -73,25 +61,34 @@ export function PostComposer({ user }) {
 
       if (documentFile) {
         try {
-          const uploadResponse = await uploadMedia(documentFile)
+          documentUrl = await uploadDocument(documentFile)
+          documentType = documentFile.name.split('.').pop().toLowerCase()
           
-          if (uploadResponse?.driveLink) {
-            documentUrl = uploadResponse.driveLink
-            documentType = documentFile.name.split('.').pop().toLowerCase()
-            success('Đã tải tài liệu lên Google Drive thành công!')
-          } else if (uploadResponse?.uploaded === false) {
-            // Google Drive not available, but file was saved
-            showError('Google Drive chưa được cấu hình. File đã được lưu tạm nhưng chưa upload lên Drive. Vui lòng cấu hình credentials.json')
-            setLoading(false)
-            return
-          } else {
-            throw new Error('Không nhận được link từ server')
+          // Save document metadata to Firestore for document management
+          try {
+            await createDocument({
+              fileName: documentFile.name,
+              fileUrl: documentUrl,
+              fileType: documentType,
+              fileSize: documentFile.size,
+              uploadedBy: {
+                uid: user.uid,
+                name: user.displayName,
+                photoURL: user.photoURL,
+              },
+              description: text.trim() || null,
+              tags: tags.length > 0 ? tags : [],
+            })
+          } catch (docError) {
+            console.warn('Failed to save document metadata:', docError)
+            // Continue even if metadata save fails
           }
+          
+          success('Đã tải tài liệu lên Firebase Storage thành công!')
         } catch (uploadError) {
           console.error('Error uploading document:', uploadError)
-          const errorMessage = uploadError.response?.data?.detail || 
-                              uploadError.message || 
-                              'Không thể tải tài liệu lên. Vui lòng kiểm tra backend có đang chạy và CORS đã được cấu hình đúng.'
+          const errorMessage = uploadError.message || 
+                              'Không thể tải tài liệu lên. Vui lòng kiểm tra kết nối và thử lại.'
           showError(errorMessage)
           setLoading(false)
           return

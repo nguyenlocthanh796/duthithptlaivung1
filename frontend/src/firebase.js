@@ -6,6 +6,7 @@ import { getDatabase } from 'firebase/database'
 import { getMessaging, getToken, onMessage } from 'firebase/messaging'
 import { getRemoteConfig } from 'firebase/remote-config'
 import { getFunctions } from 'firebase/functions'
+import { getStorage } from 'firebase/storage'
 
 // Firebase configuration - use environment variables or update with your project details
 // Get these values from: Firebase Console > Project Settings > General > Your apps
@@ -13,7 +14,7 @@ const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'gen-lang-client-0581370080',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'gen-lang-client-0581370080.firebasestorage.app',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
@@ -84,4 +85,12 @@ remoteConfig.defaultConfig = {
 // Cloud Functions
 const functions = getFunctions(app)
 
-export { app, auth, provider, db, rtdb, messaging, remoteConfig, functions }
+// Firebase Storage - for file uploads
+const storage = getStorage(app)
+// Note: Firebase Storage free tier includes:
+// - 10GB storage
+// - 1GB download/day
+// - CDN integrated
+// - Perfect for small projects
+
+export { app, auth, provider, db, rtdb, messaging, remoteConfig, functions, storage }

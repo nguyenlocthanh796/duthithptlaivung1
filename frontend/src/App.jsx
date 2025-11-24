@@ -18,6 +18,7 @@ const TeacherPage = lazy(() => import('./pages/TeacherPage').then(module => ({ d
 const AdminPage = lazy(() => import('./pages/AdminPage').then(module => ({ default: module.AdminPage })))
 const LiveQuizPage = lazy(() => import('./pages/LiveQuizPage').then(module => ({ default: module.LiveQuizPage })))
 const LiveQuizHostPage = lazy(() => import('./pages/LiveQuizHostPage').then(module => ({ default: module.LiveQuizHostPage })))
+const DocumentManagerPage = lazy(() => import('./pages/DocumentManagerPage').then(module => ({ default: module.DocumentManagerPage })))
 const TeacherRoute = lazy(() => import('./components/TeacherRoute').then(module => ({ default: module.TeacherRoute })))
 const AdminRoute = lazy(() => import('./components/AdminRoute').then(module => ({ default: module.AdminRoute })))
 const ToastContainer = lazy(() => import('./components/Toast').then(module => ({ default: module.ToastContainer })))
@@ -50,6 +51,8 @@ function App() {
             <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              {/* Firebase Auth iframe route - suppress warning */}
+              <Route path="/__/auth/iframe" element={null} />
               <Route element={<ProtectedLayout />}>
                 <Route index element={<FeedPage />} />
                 <Route 
@@ -81,6 +84,14 @@ function App() {
                   element={
                     <Suspense fallback={<LoadingSpinner />}>
                       <DashboardPage />
+                    </Suspense>
+                  } 
+                />
+                <Route 
+                  path="/documents" 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <DocumentManagerPage />
                     </Suspense>
                   } 
                 />

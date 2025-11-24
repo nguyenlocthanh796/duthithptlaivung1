@@ -11,7 +11,7 @@ import { renderTextWithLatex } from '../utils/latexRenderer'
 import { ChatHistorySidebar } from './ChatHistorySidebar'
 import logger from '../utils/logger'
 
-export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
+export function ChatPanel({ sessionId: initialSessionId, onSessionChange, hideHistorySidebar = false }) {
   const { user } = useAuth()
   const { success, error: showError } = useToast()
   const [messages, setMessages] = useState([
@@ -24,32 +24,9 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
   const [loading, setLoading] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState(initialSessionId || null)
   const [loadingSession, setLoadingSession] = useState(false)
-  const [historySidebarOpen, setHistorySidebarOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('auto') // 'auto', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-preview-image'
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
-
-  // Detect mobile and set default sidebar state
-  useEffect(() => {
-    const checkScreenSize = () => {
-      const mobile = window.innerWidth < 1024
-      setIsMobile(mobile)
-    }
-    checkScreenSize()
-    window.addEventListener('resize', checkScreenSize)
-    return () => window.removeEventListener('resize', checkScreenSize)
-  }, [])
-
-  // Set initial state based on screen size: Web mở, Mobile đóng
-  useEffect(() => {
-    if (isMobile === false) {
-      // Web: mở mặc định
-      setHistorySidebarOpen(true)
-    } else if (isMobile === true) {
-      // Mobile: đóng mặc định
-      setHistorySidebarOpen(false)
-    }
-  }, [isMobile])
 
   // Load session if sessionId is provided
   useEffect(() => {
@@ -148,8 +125,19 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
         }
       }
 
-      // Get AI response
-      const response = await chatWithAI(userMessage)
+      // Auto-detect model based on content
+      let modelToUse = null
+      if (selectedModel === 'auto') {
+        // Always use gemini-2.5-flash-lite as default
+        modelToUse = 'gemini-2.5-flash-lite'
+      } else {
+        modelToUse = selectedModel === 'gemini-2.5-flash-preview-image' 
+          ? 'gemini-2.5-flash-lite' // Fallback to flash-lite if preview-image is selected
+          : selectedModel
+      }
+
+      // Get AI response with selected model
+      const response = await chatWithAI(userMessage, { model: modelToUse })
       // Handle different response formats
       const assistantMessage = response?.answer || response?.response || response?.text || response || 'Xin lỗi, không nhận được phản hồi từ AI.'
 
@@ -218,45 +206,178 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
   }
 
   return (
-    <div className="flex h-full gap-0 overflow-hidden relative">
-      {/* Chat History Sidebar - Tích hợp vào ChatPanel */}
-      <aside
-        className={`${
-          historySidebarOpen ? 'w-72' : 'w-0'
-        } transition-all duration-300 border-r border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-950 flex-shrink-0 overflow-hidden`}
-      >
-        {historySidebarOpen && (
-          <div className="h-full">
-            <ChatHistorySidebar
-              onSelectSession={handleSelectSession}
-              currentSessionId={currentSessionId}
-            />
-          </div>
-        )}
-      </aside>
-
-      {/* Toggle History Sidebar Button */}
-      <button
-        onClick={() => setHistorySidebarOpen(!historySidebarOpen)}
-        className={`absolute left-0 top-4 z-30 p-2 bg-white dark:bg-slate-950 border-r border-b border-slate-200/30 dark:border-slate-800/30 text-slate-600 dark:text-slate-400 hover:text-gemini-blue dark:hover:text-gemini-blue-light transition shadow-sm text-lg rounded-r ${
-          historySidebarOpen ? 'translate-x-72' : 'translate-x-0'
-        }`}
-        style={{ transition: 'transform 0.3s ease' }}
-        title={historySidebarOpen ? 'Ẩn lịch sử' : 'Hiện lịch sử'}
-      >
-        {historySidebarOpen ? '◀' : '▶'}
-      </button>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 border-l border-slate-200/20 dark:border-slate-800/20">
+    <div className="flex h-full w-full overflow-hidden flex-col">
+      {/* Main Content Area - 100% width */}
+      <div className="flex-1 flex flex-col min-w-0 w-full overflow-y-auto">
         {/* Welcome Section - Chỉ hiện khi chưa có session */}
         {!currentSessionId && (
-          <div className="flex-1 flex items-center justify-center p-4 md:p-6">
-            <section className="bg-white dark:bg-slate-900 p-6 md:p-8 border border-slate-200/30 dark:border-slate-800/30 rounded-md max-w-2xl w-full mx-2 md:mx-3">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-20 h-20 md:w-24 md:h-24 rounded-full bg-gemini-blue mb-6">
+          <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-6">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gemini-blue mb-4">
+                Trợ lý AI học tập
+              </h1>
+              <p className="text-base md:text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                Đặt câu hỏi và nhận giải đáp tức thì từ AI được tinh chỉnh cho kiến thức THPT.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Chat Panel - Main Content */}
+        {currentSessionId && (
+          <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 overflow-hidden">
+            {/* Messages Area - Gemini Style */}
+            <div
+              className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 space-y-4 md:space-y-5"
+              style={{ 
+                height: '100%',
+                scrollBehavior: 'smooth',
+                contain: 'layout style paint'
+              }}
+            >
+              {messages.map((message, index) => {
+                // Safety check for message content
+                const safeContent = message?.content || ''
+                const safeRole = message?.role || 'assistant'
+                
+                return (
+                  <div
+                    key={`msg-${index}-${safeContent.substring(0, 10)}`}
+                    className={`flex gap-4 chat-message ${
+                      safeRole === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
+                  >
+                    {safeRole === 'assistant' && (
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gemini-blue flex items-center justify-center">
+                        <svg
+                          className="w-6 h-6 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                          />
+                        </svg>
+                      </div>
+                    )}
+                    <div
+                      className={`max-w-[85%] rounded-lg px-4 py-3 md:px-5 md:py-4 ${
+                        safeRole === 'user'
+                          ? 'bg-gemini-blue text-white'
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/30 dark:border-slate-700/30'
+                      }`}
+                      style={{ 
+                        minHeight: 'auto',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word',
+                        maxWidth: '100%',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <div
+                        className={`text-base leading-relaxed whitespace-pre-wrap ${
+                          safeRole === 'user'
+                            ? 'text-white'
+                            : 'text-slate-800 dark:text-slate-100'
+                        }`}
+                        style={{
+                          lineHeight: '1.6',
+                          minHeight: '1.5em',
+                          maxWidth: '100%',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {renderTextWithLatex(safeContent)}
+                      </div>
+                    </div>
+                    {safeRole === 'user' && (
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center">
+                        <span className="text-slate-600 dark:text-slate-300 text-sm font-semibold">
+                          {user?.displayName?.charAt(0)?.toUpperCase() || 'B'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              
+              {loading && (
+                <div className="flex gap-4 justify-start">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gemini-blue flex items-center justify-center">
+                    <svg
+                      className="w-6 h-6 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-700 border border-slate-200/30 dark:border-slate-600/30 rounded-lg px-5 py-4">
+                    <div className="flex gap-2">
+                      <div
+                        className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"
+                        style={{ animationDelay: '0ms' }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"
+                        style={{ animationDelay: '150ms' }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"
+                        style={{ animationDelay: '300ms' }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Input Area - Gemini Style - Luôn hiển thị */}
+      {!currentSessionId ? (
+        /* Input ở giữa màn hình khi chưa có session - Giống Gemini */
+        <div className="flex-shrink-0 p-4 md:p-6 bg-white dark:bg-slate-950">
+          <div className="max-w-3xl mx-auto">
+            <form onSubmit={sendMessage} className="relative">
+              <div className="relative">
+                <input
+                  id="chat-input"
+                  ref={inputRef}
+                  type="text"
+                  className="w-full rounded-lg border border-slate-300/50 dark:border-slate-600/50 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-4 py-3.5 pr-12 text-base focus:border-gemini-blue focus:outline-none focus:ring-1 focus:ring-gemini-blue/30 transition"
+                  placeholder="Hỏi AI..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      sendMessage(e)
+                    }
+                  }}
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-gemini-blue text-white hover:bg-gemini-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center"
+                  title="Gửi (Enter)"
+                >
                   <svg
-                    className="w-10 h-10 md:w-12 md:h-12 text-white"
+                    className="w-4 h-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -265,50 +386,59 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
                     />
                   </svg>
-                </div>
-                <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-slate-100 mb-4">
-                  Trợ lý AI học tập
-                </h1>
-                <p className="text-base md:text-lg lg:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                  Đặt câu hỏi và nhận giải đáp tức thì từ AI được tinh chỉnh cho kiến thức THPT.
-                </p>
+                </button>
               </div>
-            </section>
+            </form>
           </div>
-        )}
-
-        {/* Chat Panel - Main Content */}
-        {currentSessionId && (
-          <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 rounded-md border border-slate-200/30 dark:border-slate-800/30 overflow-hidden mx-2 md:mx-3">
-      {/* Messages Area - Gemini Style */}
-      <div
-        className="flex-1 overflow-y-auto px-4 md:px-5 py-4 md:py-5 space-y-4 md:space-y-5"
-        style={{ 
-          maxHeight: 'calc(100vh - 180px)',
-          minHeight: '300px',
-          scrollBehavior: 'smooth',
-          contain: 'layout style paint'
-        }}
-      >
-        {messages.map((message, index) => {
-          // Safety check for message content
-          const safeContent = message?.content || ''
-          const safeRole = message?.role || 'assistant'
-          
-          return (
-          <div
-            key={`msg-${index}-${safeContent.substring(0, 10)}`}
-            className={`flex gap-4 chat-message ${
-              safeRole === 'user' ? 'justify-end' : 'justify-start'
-            }`}
-          >
-            {safeRole === 'assistant' && (
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gemini-blue flex items-center justify-center">
+        </div>
+      ) : (
+        /* Input ở dưới cùng khi đã có session */
+        <div className="flex-shrink-0 border-t border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-900 p-3 md:p-4">
+          {/* Model Selection */}
+          <div className="flex items-center justify-center gap-2 mb-2 max-w-4xl mx-auto">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Model:</span>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-gemini-blue"
+            >
+              <option value="auto">Tự động (Flash Lite)</option>
+              <option value="gemini-2.5-flash-lite">Flash Lite</option>
+            </select>
+          </div>
+          <form onSubmit={sendMessage} className="flex gap-3 items-end max-w-4xl mx-auto">
+            <div className="flex-1 relative">
+              <textarea
+                id="chat-input"
+                ref={inputRef}
+                className="w-full rounded-lg border border-slate-300/50 dark:border-slate-600/50 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-4 py-3 pr-12 text-base focus:border-gemini-blue focus:outline-none focus:ring-2 focus:ring-gemini-blue/20 resize-none"
+                placeholder="Nhập câu hỏi hoặc yêu cầu..."
+                value={input}
+                onChange={(event) => {
+                  setInput(event.target.value)
+                  event.target.style.height = 'auto'
+                  event.target.style.height = `${Math.min(event.target.scrollHeight, 120)}px`
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    sendMessage(e)
+                  }
+                }}
+                rows={1}
+                disabled={loading}
+              />
+              <button
+                type="submit"
+                disabled={loading || !input.trim()}
+                className="absolute right-2 bottom-2 w-9 h-9 rounded-full bg-gemini-blue text-white hover:bg-gemini-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center"
+                title="Gửi (Enter)"
+              >
                 <svg
-                  className="w-6 h-6 text-white"
+                  className="w-5 h-5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -317,144 +447,17 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
                   />
                 </svg>
-              </div>
-            )}
-            <div
-              className={`max-w-[85%] rounded-lg px-4 py-3 md:px-5 md:py-4 ${
-                safeRole === 'user'
-                  ? 'bg-gemini-blue text-white'
-                  : 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/30 dark:border-slate-700/30'
-              }`}
-              style={{ 
-                minHeight: 'auto',
-                wordBreak: 'break-word',
-                overflowWrap: 'break-word',
-                maxWidth: '100%',
-                overflow: 'hidden'
-              }}
-            >
-              <div
-                className={`text-base leading-relaxed whitespace-pre-wrap ${
-                  safeRole === 'user'
-                    ? 'text-white'
-                    : 'text-slate-800 dark:text-slate-100'
-                }`}
-                style={{
-                  lineHeight: '1.6',
-                  minHeight: '1.5em',
-                  maxWidth: '100%',
-                  overflow: 'hidden'
-                }}
-              >
-                {renderTextWithLatex(safeContent)}
-              </div>
+              </button>
             </div>
-            {safeRole === 'user' && (
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center">
-                <span className="text-slate-600 dark:text-slate-300 text-xs font-semibold">
-                  {user?.displayName?.charAt(0)?.toUpperCase() || 'B'}
-                </span>
-              </div>
-            )}
-          </div>
-          )
-        })}
-        
-        {loading && (
-          <div className="flex gap-4 justify-start">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-gemini-blue to-gemini-green flex items-center justify-center shadow-md">
-              <svg
-                className="w-6 h-6 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                />
-              </svg>
-            </div>
-            <div className="bg-slate-50 dark:bg-slate-700 border border-slate-200/30 dark:border-slate-600/30 rounded-lg px-5 py-4">
-              <div className="flex gap-2">
-                <div
-                  className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"
-                  style={{ animationDelay: '0ms' }}
-                ></div>
-                <div
-                  className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"
-                  style={{ animationDelay: '150ms' }}
-                ></div>
-                <div
-                  className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"
-                  style={{ animationDelay: '300ms' }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input Area - Gemini Style */}
-      <div className="border-t border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-900 p-3 md:p-4">
-        <form onSubmit={sendMessage} className="flex gap-3 items-end">
-          <div className="flex-1 relative">
-            <textarea
-              id="chat-input"
-              ref={inputRef}
-              className="w-full rounded-lg border border-slate-300/50 dark:border-slate-600/50 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-4 py-3 pr-12 text-base focus:border-gemini-blue focus:outline-none focus:ring-2 focus:ring-gemini-blue/20 resize-none"
-              placeholder="Nhập câu hỏi hoặc yêu cầu..."
-              value={input}
-              onChange={(event) => {
-                setInput(event.target.value)
-                event.target.style.height = 'auto'
-                event.target.style.height = `${Math.min(event.target.scrollHeight, 120)}px`
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  sendMessage(e)
-                }
-              }}
-              rows={1}
-              disabled={loading}
-            />
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-              className="absolute right-2 bottom-2 w-9 h-9 rounded-full bg-gemini-blue text-white hover:bg-gemini-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center"
-              title="Gửi (Enter)"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                />
-              </svg>
-            </button>
-          </div>
-        </form>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">
-          AI có thể mắc lỗi. Hãy kiểm tra thông tin quan trọng.
-        </p>
-      </div>
-          </div>
-        )}
-      </div>
+          </form>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 text-center max-w-4xl mx-auto">
+            AI có thể mắc lỗi. Hãy kiểm tra thông tin quan trọng.
+          </p>
+        </div>
+      )}
     </div>
   )
 }

@@ -180,6 +180,39 @@ service cloud.firestore {
 
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
+
+    // Documents collection
+    match /documents/{documentId} {
+      // Allow all authenticated users to read documents
+      allow read: if isAuthenticated();
+
+      // Allow authenticated users to create documents
+      allow create: if isAuthenticated() && (
+        (request.resource.data.uploadedBy != null && request.resource.data.uploadedBy.uid == request.auth.uid) ||
+        request.resource.data.uploadedBy.uid == request.auth.uid
+      ) && (
+        request.resource.data.fileName is string &&
+        request.resource.data.fileUrl is string &&
+        request.resource.data.fileType is string &&
+        request.resource.data.fileSize is int &&
+        request.resource.data.createdAt is timestamp &&
+        request.resource.data.updatedAt is timestamp
+      );
+
+      // Allow owner or admin to update documents
+      allow update: if isAuthenticated() && (
+        (resource.data.uploadedBy != null && resource.data.uploadedBy.uid == request.auth.uid) ||
+        resource.data.uploadedBy.uid == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Allow owner or admin to delete documents
+      allow delete: if isAuthenticated() && (
+        (resource.data.uploadedBy != null && resource.data.uploadedBy.uid == request.auth.uid) ||
+        resource.data.uploadedBy.uid == request.auth.uid ||
+        isAdmin()
+      );
+    }
   }
 }
 

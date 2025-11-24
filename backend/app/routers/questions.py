@@ -53,7 +53,7 @@ def extract_json_from_text(text: str) -> dict:
     return json.loads(text)
 
 
-async def generate_with_gemini(prompt: str, temperature: float = 0.5, max_tokens: int = 800) -> str:
+async def generate_with_gemini(prompt: str, temperature: float = 0.5, max_tokens: int = 800, model: str = None) -> str:
     """Generate text using Gemini API with automatic multi-key rotation."""
     gemini = get_gemini_client()
     if not gemini:
@@ -63,16 +63,34 @@ async def generate_with_gemini(prompt: str, temperature: float = 0.5, max_tokens
         )
     
     try:
-        logger.info("Generating with Gemini API")
-        result = await gemini.generate(prompt, temperature, max_tokens)
-        logger.info("Successfully generated with Gemini")
+        logger.info(f"Generating with Gemini API (model: {model or 'default'})")
+        result = await gemini.generate(prompt, temperature, max_tokens, model)
+        logger.info(f"Successfully generated {len(result)} characters with Gemini")
         return result
-    except Exception as e:
-        logger.error(f"Gemini generation failed: {e}")
+    except ValueError as e:
+        logger.error(f"Gemini API key error: {e}")
         raise HTTPException(
             status_code=503,
-            detail=f"Không thể kết nối đến Gemini API. Vui lòng kiểm tra cấu hình: {str(e)}"
+            detail=f"API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại cấu hình: {str(e)}"
         ) from e
+    except Exception as e:
+        logger.error(f"Gemini generation failed: {e}", exc_info=True)
+        error_msg = str(e).lower()
+        if 'quota' in error_msg or '429' in error_msg or 'resource exhausted' in error_msg:
+            raise HTTPException(
+                status_code=429,
+                detail="Đã vượt quá giới hạn API. Vui lòng thử lại sau."
+            ) from e
+        elif 'permission denied' in error_msg or '403' in error_msg:
+            raise HTTPException(
+                status_code=403,
+                detail="API key không hợp lệ hoặc đã bị rò rỉ. Vui lòng kiểm tra lại API key trong cấu hình."
+            ) from e
+        else:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Không thể kết nối đến Gemini API. Vui lòng kiểm tra cấu hình: {str(e)}"
+            ) from e
 
 
 @router.post("/clone", response_model=QuestionCloneResult)
@@ -92,9 +110,11 @@ async def clone_question(payload: QuestionCloneRequest):
     
     try:
         logger.info(f"Generating variants for question: {payload.question[:50]}...")
+        # Use default model for question cloning (will use gemini-2.5-flash-lite if available)
         raw = await generate_with_gemini(prompt, temperature=0.5, max_tokens=800)
         
         if not raw or not raw.strip():
+            logger.warning("AI returned empty response")
             raise HTTPException(
                 status_code=502,
                 detail="AI không trả về kết quả. Vui lòng thử lại."
@@ -105,13 +125,22 @@ async def clone_question(payload: QuestionCloneRequest):
         # Try to extract JSON from response
         try:
             data = extract_json_from_text(raw)
+            logger.info(f"Successfully parsed JSON from AI response")
         except json.JSONDecodeError as json_error:
             logger.error(f"Failed to parse JSON from AI response: {json_error}")
-            logger.error(f"Raw response: {raw[:500]}")
+            logger.error(f"Raw response (first 1000 chars): {raw[:1000]}")
+            # Try to provide more helpful error message
             raise HTTPException(
                 status_code=502,
-                detail="AI trả về dữ liệu không đúng định dạng. Vui lòng thử lại."
+                detail=f"AI trả về dữ liệu không đúng định dạng JSON. Vui lòng thử lại. Lỗi: {str(json_error)}"
             ) from json_error
+        except Exception as parse_error:
+            logger.error(f"Unexpected error parsing JSON: {parse_error}")
+            logger.error(f"Raw response (first 1000 chars): {raw[:1000]}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Lỗi khi xử lý phản hồi từ AI: {str(parse_error)}"
+            ) from parse_error
         
         # Validate and extract data
         distractors = data.get("distractors", [])

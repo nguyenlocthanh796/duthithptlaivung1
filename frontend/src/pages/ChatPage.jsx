@@ -1,73 +1,80 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChatPanel } from '../components/ChatPanel'
-import { ThreeColumnLayout } from '../components/ThreeColumnLayout'
+import { ChatHistorySidebar } from '../components/ChatHistorySidebar'
 import ErrorBoundary from '../components/ErrorBoundary'
 
 export function ChatPage() {
   const [currentSessionId, setCurrentSessionId] = useState(null)
+  const [historySidebarOpen, setHistorySidebarOpen] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
 
-  const rightSidebar = (
-    <div className="space-y-6">
-      <div>
-        <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-3">💡 Gợi ý prompt</h4>
-        <div className="space-y-2">
-          <button
-            onClick={() => {
-              const input = document.querySelector('#chat-input')
-              if (input) {
-                input.value = 'Sinh 5 câu hỏi trắc nghiệm Hóa 12 với đáp án giải thích.'
-                input.focus()
-              }
-            }}
-            className="w-full text-left p-3 rounded border border-slate-200/30 dark:border-slate-700/30 bg-white dark:bg-slate-800 hover:border-gemini-blue hover:bg-gemini-blue/5 transition text-sm text-slate-700 dark:text-slate-300"
-          >
-            Sinh 5 câu hỏi trắc nghiệm Hóa 12 với đáp án giải thích.
-          </button>
-          <button
-            onClick={() => {
-              const input = document.querySelector('#chat-input')
-              if (input) {
-                input.value = 'Hãy biến đổi câu hỏi này thành 10 biến thể khó hơn.'
-                input.focus()
-              }
-            }}
-            className="w-full text-left p-3 rounded border border-slate-200/30 dark:border-slate-700/30 bg-white dark:bg-slate-800 hover:border-gemini-blue hover:bg-gemini-blue/5 transition text-sm text-slate-700 dark:text-slate-300"
-          >
-            Hãy biến đổi câu hỏi này thành 10 biến thể khó hơn.
-          </button>
-          <button
-            onClick={() => {
-              const input = document.querySelector('#chat-input')
-              if (input) {
-                input.value = 'Tóm tắt nhanh kiến thức Cấp số cộng để ôn thi.'
-                input.focus()
-              }
-            }}
-            className="w-full text-left p-3 rounded border border-slate-200/30 dark:border-slate-700/30 bg-white dark:bg-slate-800 hover:border-gemini-blue hover:bg-gemini-blue/5 transition text-sm text-slate-700 dark:text-slate-300"
-          >
-            Tóm tắt nhanh kiến thức Cấp số cộng để ôn thi.
-          </button>
-        </div>
-      </div>
-      <div className="p-4 rounded bg-gemini-blue/5 dark:bg-gemini-blue/10 border border-gemini-blue/20">
-        <p className="text-sm font-semibold text-gemini-blue mb-2">💡 Mẹo sử dụng</p>
-        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-          Hãy mô tả rõ môn học, cấp độ, định dạng mong muốn. Trợ lý đã tinh chỉnh cho kiến thức THPT nên có thể trả lời đầy đủ bằng tiếng Việt.
-        </p>
-      </div>
-    </div>
-  )
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const mobile = window.innerWidth < 1024
+      setIsMobile(mobile)
+      // Web: mở mặc định, Mobile: đóng mặc định
+      if (!mobile) {
+        setHistorySidebarOpen(true)
+      } else {
+        setHistorySidebarOpen(false)
+      }
+    }
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
+
+  const handleSelectSession = (sessionId) => {
+    setCurrentSessionId(sessionId)
+  }
 
   return (
-    <ThreeColumnLayout rightSidebar={rightSidebar}>
-      <div className="w-full h-[calc(100vh-64px)] -mx-4 -my-6 -mt-0">
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden relative w-full">
+      {/* Chat History Sidebar - Left (Giống Gemini) */}
+      <aside
+        className={`${
+          historySidebarOpen ? 'w-80' : 'w-0'
+        } transition-all duration-300 border-r border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-950 flex-shrink-0 overflow-hidden`}
+      >
+        {historySidebarOpen && (
+          <div className="h-full">
+            <ChatHistorySidebar
+              onSelectSession={handleSelectSession}
+              currentSessionId={currentSessionId}
+              onToggle={() => setHistorySidebarOpen(false)}
+            />
+          </div>
+        )}
+      </aside>
+
+      {/* Toggle History Sidebar Button - Tối giản, tinh tế */}
+      {!historySidebarOpen && (
+        <button
+          onClick={() => setHistorySidebarOpen(true)}
+          className="absolute left-2 top-3 z-30 p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
+          title="Mở trình đơn"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
+
+      {/* Main Chat Area - 100% width */}
+      <div 
+        className="flex-1 flex flex-col min-w-0"
+        style={{
+          marginLeft: historySidebarOpen ? '0' : '0',
+        }}
+      >
         <ErrorBoundary>
           <ChatPanel
             sessionId={currentSessionId}
             onSessionChange={(sessionId) => setCurrentSessionId(sessionId)}
+            hideHistorySidebar={true} // Không hiển thị history sidebar trong ChatPanel nữa
           />
         </ErrorBoundary>
       </div>
-    </ThreeColumnLayout>
+    </div>
   )
 }

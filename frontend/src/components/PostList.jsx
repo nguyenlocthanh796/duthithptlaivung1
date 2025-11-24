@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { renderTextWithLatex } from '../utils/latexRenderer'
+import { SolutionModal } from './SolutionModal'
 import logger from '../utils/logger'
 import {
   toggleLike,
@@ -40,6 +41,7 @@ function normalizeArray(value) {
   return Object.values(value)
 }
 
+
 const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentUser }) {
   const { success, error: showError } = useToast()
   const [commentText, setCommentText] = useState('')
@@ -59,6 +61,7 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [savedPosts, setSavedPosts] = useState(new Set())
   const [isSaving, setIsSaving] = useState(false)
+  const [showSolutionModal, setShowSolutionModal] = useState(false)
   
   // Load saved posts
   useEffect(() => {
@@ -282,7 +285,32 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
       success('Đã giải bài thành công!')
     } catch (error) {
       logger.error('Error solving post:', error)
-      const errorMsg = error.response?.data?.detail || error.message || 'Không thể giải bài. Vui lòng thử lại.'
+      
+      // Xử lý các loại lỗi khác nhau
+      let errorMsg = 'Không thể giải bài. Vui lòng thử lại.'
+      
+      if (error.response) {
+        // Lỗi từ server
+        const status = error.response.status
+        const detail = error.response.data?.detail || error.response.data?.message
+        
+        if (status === 403) {
+          errorMsg = detail || 'API key không hợp lệ. Vui lòng liên hệ quản trị viên.'
+        } else if (status === 429) {
+          errorMsg = detail || 'Đã vượt quá giới hạn API. Vui lòng thử lại sau.'
+        } else if (status === 400) {
+          errorMsg = detail || 'Nội dung không hợp lệ. Vui lòng kiểm tra lại.'
+        } else if (status === 503) {
+          errorMsg = detail || 'Dịch vụ AI tạm thời không khả dụng. Vui lòng thử lại sau.'
+        } else if (detail) {
+          errorMsg = detail
+        } else {
+          errorMsg = `Lỗi server (${status}). Vui lòng thử lại sau.`
+        }
+      } else if (error.message) {
+        errorMsg = error.message
+      }
+      
       showError(errorMsg)
     } finally {
       setIsSolvingPost(false)
@@ -730,103 +758,14 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
         </div>
       )}
 
-      {/* Nút giải bài và kết quả giải bài */}
-      {post.solution && (
-        <div className="mt-3 border border-slate-200/50 dark:border-slate-700/50 bg-white dark:bg-slate-800 post-solution-container rounded-lg shadow-sm" style={{ contain: 'layout style' }}>
-          <div className="flex items-center justify-between border-b border-slate-200/50 dark:border-slate-700/50 p-4 bg-slate-50/50 dark:bg-slate-900/50">
-            <button
-              onClick={() => setShowPostSolution(!showPostSolution)}
-              className="flex items-center gap-2 text-base font-semibold text-gemini-blue hover:text-gemini-blue/80 transition"
-            >
-              {showPostSolution ? '▼' : '▶'} Giải đáp AI
-              {post.isFlagged && <span className="text-sm text-gemini-red">⚠️ Đã đánh dấu sai</span>}
-            </button>
-            {(isAdmin || isTeacher) && (
-              <div className="flex gap-2">
-                {!editingPostSolution && (
-                  <>
-                    <button
-                      onClick={() => {
-                        setEditingPostSolution(true)
-                        setEditPostSolutionText(post.solution)
-                      }}
-                      className="border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 transition"
-                    >
-                      Sửa
-                    </button>
-                    {!post.isFlagged && (
-                      <button
-                        onClick={handleFlagPostSolution}
-                        className="border border-gemini-red px-2 py-1 text-xs text-gemini-red hover:bg-gemini-red/10 transition"
-                      >
-                        Đánh dấu sai
-                      </button>
-                    )}
-                    <button
-                      onClick={handleDeletePostSolution}
-                      className="border border-gemini-red px-2 py-1 text-xs text-gemini-red hover:bg-gemini-red/10 transition"
-                    >
-                      Xóa
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          <div 
-            className="overflow-hidden transition-all duration-300"
-            style={{
-              maxHeight: showPostSolution ? '2000px' : '0',
-              opacity: showPostSolution ? 1 : 0,
-            }}
-          >
-            {showPostSolution && (
-              <div className="p-5">
-                {editingPostSolution ? (
-                  <div className="space-y-2">
-                    <textarea
-                      className="w-full border border-slate-200/30 dark:border-slate-700/30 bg-white dark:bg-slate-700 p-2 text-sm rounded focus:border-gemini-blue focus:outline-none focus:ring-1 focus:ring-gemini-blue"
-                      rows="6"
-                      value={editPostSolutionText}
-                      onChange={(e) => setEditPostSolutionText(e.target.value)}
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleUpdatePostSolution}
-                        className="bg-gemini-blue px-3 py-1 text-sm text-white hover:bg-gemini-blue/90 transition rounded"
-                      >
-                        Lưu
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEditingPostSolution(false)
-                          setEditPostSolutionText('')
-                        }}
-                        className="border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded"
-                      >
-                        Hủy
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-slate-800 dark:text-slate-200 leading-relaxed">
-                    {renderTextWithLatex(post.solution)}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Action Bar - Facebook Style */}
-      <div className="px-4 py-2 border-t border-slate-200">
-        <div className="flex items-center justify-between text-slate-600 text-sm">
+      <div className="px-4 py-2 border-t border-slate-200/30 dark:border-slate-800/30">
+        <div className="flex items-center justify-between text-slate-600 dark:text-slate-400 text-sm mb-2">
           <div className="flex items-center gap-1">
             {likes.length > 0 && (
               <div className="flex items-center gap-1">
                 <span className="text-red-500">❤️</span>
-                <span className="text-slate-600">{likes.length}</span>
+                <span className="text-slate-600 dark:text-slate-400">{likes.length}</span>
               </div>
             )}
             {comments.length > 0 && (
@@ -838,50 +777,45 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
           </div>
         </div>
         
-        {/* Action Buttons */}
-        <div className="flex items-center border-t border-slate-200 mt-2 pt-1">
-        <button
-          onClick={() => toggleLike({ postId: post.id, userId })}
+        {/* Action Buttons - 1 hàng: Tym, Bình luận, Giải đáp/Kết quả */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => toggleLike({ postId: post.id, userId })}
             className={`flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg transition ${
               liked 
-                ? 'text-blue-600 bg-blue-50' 
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' 
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
-        >
+          >
             <span className={liked ? 'text-red-500' : ''}>❤️</span>
             <span className="text-sm font-medium">Thích</span>
-        </button>
+          </button>
           <button
-            className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-slate-600 hover:bg-slate-100 transition"
+            className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
             onClick={() => document.querySelector(`#comment-input-${post.id}`)?.focus()}
           >
             <span>💬</span>
             <span className="text-sm font-medium">Bình luận</span>
           </button>
-          <button
-            onClick={handleSavePost}
-            disabled={isSaving}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg transition disabled:opacity-50 ${
-              isSaved
-                ? 'text-yellow-600 bg-yellow-50'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-            title={isSaved ? 'Đã lưu' : 'Lưu bài viết'}
-          >
-            <span>{isSaved ? '⭐' : '☆'}</span>
-            <span className="text-sm font-medium">{isSaved ? 'Đã lưu' : 'Lưu'}</span>
-          </button>
-          {!post.solution && (
-          <button
+          {post.solution ? (
+            <button
+              onClick={() => setShowSolutionModal(true)}
+              className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-gemini-blue dark:text-gemini-blue-light hover:bg-gemini-blue/10 dark:hover:bg-gemini-blue/20 transition"
+            >
+              <span>📋</span>
+              <span className="text-sm font-medium">Kết quả</span>
+            </button>
+          ) : (
+            <button
               onClick={handleSolvePost}
               disabled={isSolvingPost}
-              className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-gemini-blue hover:bg-blue-50 transition disabled:opacity-50"
-          >
+              className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-gemini-blue dark:text-gemini-blue-light hover:bg-gemini-blue/10 dark:hover:bg-gemini-blue/20 transition disabled:opacity-50"
+            >
               <span>{isSolvingPost ? '⏳' : '🤖'}</span>
-              <span className="text-sm font-medium">{isSolvingPost ? 'Đang giải...' : 'AI Giải'}</span>
-          </button>
-        )}
-      </div>
+              <span className="text-sm font-medium">{isSolvingPost ? 'Đang giải...' : 'Giải đáp'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Comment Input - Facebook Style */}
@@ -1217,6 +1151,40 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
           </div>
         )}
       </div>
+
+      {/* Solution Modal */}
+      <SolutionModal
+        isOpen={showSolutionModal}
+        onClose={() => {
+          setShowSolutionModal(false)
+          setEditingPostSolution(false)
+          setEditPostSolutionText('')
+        }}
+        solution={post.solution}
+        postText={post.text}
+        postId={post.id}
+        userId={userId}
+        userRoles={userRoles}
+        onFlagSolution={handleFlagPostSolution}
+        onEditSolution={async (newSolution) => {
+          try {
+            await updatePostSolution({
+              postId: post.id,
+              solution: newSolution.trim(),
+              updatedBy: userId,
+            })
+            success('Đã cập nhật giải đáp thành công!')
+            setShowSolutionModal(false)
+            // Reload page or update post state
+            window.location.reload()
+          } catch (error) {
+            logger.error('Error updating solution in modal:', error)
+            showError(error.message || 'Không thể cập nhật giải đáp. Vui lòng thử lại.')
+          }
+        }}
+        onDeleteSolution={handleDeletePostSolution}
+        isFlagged={post.isFlagged}
+      />
     </article>
   )
 }, (prevProps, nextProps) => {

@@ -27,6 +27,7 @@ const examRoomsCollection = collection(db, 'examRooms')
 const submissionsCollection = collection(db, 'submissions')
 const notificationsCollection = collection(db, 'notifications')
 const chatHistoryCollection = collection(db, 'chatHistory')
+const documentsCollection = collection(db, 'documents')
 
 // Helper function to normalize arrays (handles both array and object formats from Firestore)
 function normalizeArray(value) {
@@ -785,4 +786,131 @@ export const markAllNotificationsAsRead = async (userId) => {
     batch.update(docSnap.ref, { read: true })
   })
   await batch.commit()
+}
+
+// Document Management Functions
+export const createDocument = async ({ 
+  fileName, 
+  fileUrl, 
+  fileType, 
+  fileSize, 
+  uploadedBy, 
+  description = null,
+  tags = []
+}) => {
+  return addDoc(documentsCollection, {
+    fileName,
+    fileUrl,
+    fileType,
+    fileSize,
+    uploadedBy,
+    description,
+    tags,
+    downloadCount: 0,
+    viewCount: 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  })
+}
+
+export const getDocuments = async (limitCount = 50) => {
+  const q = query(
+    documentsCollection,
+    orderBy('createdAt', 'desc'),
+    limit(limitCount)
+  )
+  const snapshot = await getDocs(q)
+  return snapshot.docs.map((docSnap) => ({ 
+    id: docSnap.id, 
+    ...docSnap.data() 
+  }))
+}
+
+export const getDocumentsByUser = async (userId, limitCount = 50) => {
+  const q = query(
+    documentsCollection,
+    where('uploadedBy.uid', '==', userId),
+    orderBy('createdAt', 'desc'),
+    limit(limitCount)
+  )
+  const snapshot = await getDocs(q)
+  return snapshot.docs.map((docSnap) => ({ 
+    id: docSnap.id, 
+    ...docSnap.data() 
+  }))
+}
+
+export const getDocumentsByType = async (fileType, limitCount = 50) => {
+  const q = query(
+    documentsCollection,
+    where('fileType', '==', fileType),
+    orderBy('createdAt', 'desc'),
+    limit(limitCount)
+  )
+  const snapshot = await getDocs(q)
+  return snapshot.docs.map((docSnap) => ({ 
+    id: docSnap.id, 
+    ...docSnap.data() 
+  }))
+}
+
+export const searchDocuments = async (searchTerm, limitCount = 50) => {
+  const q = query(
+    documentsCollection,
+    orderBy('createdAt', 'desc'),
+    limit(limitCount * 2) // Get more to filter
+  )
+  const snapshot = await getDocs(q)
+  const allDocs = snapshot.docs.map((docSnap) => ({ 
+    id: docSnap.id, 
+    ...docSnap.data() 
+  }))
+  
+  // Filter by search term (fileName, description, tags)
+  const term = searchTerm.toLowerCase()
+  return allDocs
+    .filter((doc) => 
+      doc.fileName?.toLowerCase().includes(term) ||
+      doc.description?.toLowerCase().includes(term) ||
+      doc.tags?.some((tag) => tag.toLowerCase().includes(term))
+    )
+    .slice(0, limitCount)
+}
+
+export const incrementDocumentViewCount = async (documentId) => {
+  const docRef = doc(documentsCollection, documentId)
+  const docSnap = await getDoc(docRef)
+  if (docSnap.exists()) {
+    const currentCount = docSnap.data().viewCount || 0
+    await updateDoc(docRef, {
+      viewCount: currentCount + 1,
+      updatedAt: serverTimestamp(),
+    })
+  }
+}
+
+export const incrementDocumentDownloadCount = async (documentId) => {
+  const docRef = doc(documentsCollection, documentId)
+  const docSnap = await getDoc(docRef)
+  if (docSnap.exists()) {
+    const currentCount = docSnap.data().downloadCount || 0
+    await updateDoc(docRef, {
+      downloadCount: currentCount + 1,
+      updatedAt: serverTimestamp(),
+    })
+  }
+}
+
+export const deleteDocument = async (documentId) => {
+  await deleteDoc(doc(documentsCollection, documentId))
+}
+
+export const updateDocument = async ({ documentId, description, tags }) => {
+  const docRef = doc(documentsCollection, documentId)
+  const updateData = {
+    updatedAt: serverTimestamp(),
+  }
+  if (description !== undefined) updateData.description = description
+  if (tags !== undefined) updateData.tags = tags
+  await updateDoc(docRef, updateData)
 }

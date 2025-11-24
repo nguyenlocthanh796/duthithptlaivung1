@@ -7,6 +7,8 @@ from uuid import uuid4
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from ..services.drive_client import get_drive_client
+from ..services.r2_client import get_r2_client
+from ..services.gcs_client import get_gcs_client
 from ..services.gemini_client import get_gemini_client
 from ..config import get_settings
 
@@ -58,48 +60,66 @@ async def upload_file(file: UploadFile = File(...)):
         temp_path.write_bytes(content)
         logger.info(f"File saved to temp path: {temp_path}, size: {file_size} bytes")
         
-        # Get Google Drive client
-        drive_client = None
-        drive_link = None
+        # Try upload in order: R2 → GCS → Google Drive
+        upload_link = None
+        upload_method = None
+        settings = get_settings()
         
+        # Try R2 upload first (best option)
         try:
-            drive_client = get_drive_client()
-        except FileNotFoundError as e:
-            logger.warning(f"Google Drive credentials not found: {e}")
-            logger.warning("File will be saved locally but not uploaded to Google Drive")
-            # Continue without Google Drive - return local file info
-        except Exception as e:
-            logger.warning(f"Error initializing Google Drive client: {e}")
-            logger.warning("File will be saved locally but not uploaded to Google Drive")
-            # Continue without Google Drive
-        
-        # Upload to Google Drive if available
-        if drive_client:
+            r2_client = get_r2_client()
+            logger.info(f"Uploading file to R2: {file.filename}")
+            upload_link = r2_client.upload_file(temp_path)
+            upload_method = "R2"
+            logger.info(f"File uploaded successfully to R2. Link: {upload_link}")
+        except (ValueError, FileNotFoundError) as e:
+            logger.warning(f"R2 not configured or unavailable: {e}")
+            # Fallback to Google Cloud Storage
             try:
-                logger.info(f"Uploading file to Google Drive: {file.filename}")
-                settings = get_settings()
-                # Folder ID mới: 1GgsmXUHK3kXHAPVTFk0DKss_DsxZDkNZ
-                folder_id = settings.google_drive_folder_id if settings.google_drive_folder_id else "1GgsmXUHK3kXHAPVTFk0DKss_DsxZDkNZ"
-                logger.info(f"Uploading to folder ID: {folder_id}")
-                # Set timeout to 120 seconds for large files
-                drive_link = drive_client.upload_file(temp_path, parent_folder_id=folder_id)
-                logger.info(f"File uploaded successfully. Drive link: {drive_link}")
-            except ValueError as e:
-                # ValueError from drive_client contains user-friendly message
-                error_msg = str(e)
-                logger.error(f"Error uploading to Google Drive: {error_msg}")
-                if "storage quota" in error_msg.lower():
-                    logger.warning("Google Drive upload failed - permissions may not be synced yet. File saved locally.")
-                else:
-                    logger.warning("Continuing without Google Drive upload")
-                # Continue without Google Drive - don't fail the request
+                gcs_client = get_gcs_client()
+                logger.info(f"Uploading file to GCS: {file.filename}")
+                upload_link = gcs_client.upload_file(temp_path)
+                upload_method = "GCS"
+                logger.info(f"File uploaded successfully to GCS. Link: {upload_link}")
+            except (ValueError, FileNotFoundError) as e:
+                logger.warning(f"GCS not configured or unavailable: {e}")
+                # Fallback to Google Drive (last resort)
+                try:
+                    drive_client = get_drive_client()
+                    logger.info(f"Uploading file to Google Drive: {file.filename}")
+                    folder_id = settings.google_drive_folder_id if settings.google_drive_folder_id else "1GgsmXUHK3kXHAPVTFk0DKss_DsxZDkNZ"
+                    logger.info(f"Uploading to folder ID: {folder_id}")
+                    upload_link = drive_client.upload_file(temp_path, parent_folder_id=folder_id)
+                    upload_method = "Google Drive"
+                    logger.info(f"File uploaded successfully to Google Drive. Link: {upload_link}")
+                except FileNotFoundError as e:
+                    logger.warning(f"Google Drive credentials not found: {e}")
+                    logger.warning("File will be saved locally but not uploaded to any cloud storage")
+                except ValueError as e:
+                    error_msg = str(e)
+                    logger.error(f"Error uploading to Google Drive: {error_msg}")
+                    if "storage quota" in error_msg.lower():
+                        logger.warning("Google Drive upload failed - permissions may not be synced yet. File saved locally.")
+                    else:
+                        logger.warning("Continuing without Google Drive upload")
+                except Exception as e:
+                    logger.warning(f"Error uploading to Google Drive: {e}")
+                    logger.warning("File will be saved locally but not uploaded to any cloud storage")
             except Exception as e:
-                logger.error(f"Error uploading to Google Drive: {e}", exc_info=True)
-                logger.warning("Continuing without Google Drive upload")
-                # Continue without Google Drive - don't fail the request
+                logger.warning(f"Error uploading to GCS: {e}")
+                # Continue to try Google Drive
+                try:
+                    drive_client = get_drive_client()
+                    logger.info(f"Uploading file to Google Drive: {file.filename}")
+                    folder_id = settings.google_drive_folder_id if settings.google_drive_folder_id else "1GgsmXUHK3kXHAPVTFk0DKss_DsxZDkNZ"
+                    upload_link = drive_client.upload_file(temp_path, parent_folder_id=folder_id)
+                    upload_method = "Google Drive"
+                    logger.info(f"File uploaded successfully to Google Drive. Link: {upload_link}")
+                except Exception as e2:
+                    logger.warning(f"All storage options failed. File saved locally. Last error: {e2}")
         
-        # Return response - with or without Google Drive link
-        if drive_link:
+        # Return response - with or without upload link
+        if upload_link:
             # Clean up temp file after successful upload
             if temp_path and temp_path.exists():
                 try:
@@ -110,9 +130,10 @@ async def upload_file(file: UploadFile = File(...)):
             
             return {
                 "fileName": file.filename,
-                "driveLink": drive_link,
+                "driveLink": upload_link,  # Keep field name for backward compatibility
                 "fileSize": file_size,
-                "uploaded": True
+                "uploaded": True,
+                "uploadMethod": upload_method  # R2 or Google Drive
             }
         else:
             # Return local file path as fallback
@@ -143,23 +164,34 @@ async def upload_file(file: UploadFile = File(...)):
 
 
 async def extract_text_from_file(file_path: Path) -> str:
-    """Extract text from PDF, DOC, or DOCX file."""
+    """Extract text from PDF, DOC, or DOCX file. Uses PyMuPDF for better PDF extraction."""
     suffix = file_path.suffix.lower()
     
     if suffix == ".pdf":
+        # Try PyMuPDF first (better extraction)
         try:
-            import PyPDF2
+            import fitz  # PyMuPDF
+            doc = fitz.open(file_path)
             text = ""
-            with open(file_path, "rb") as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
+            for page in doc:
+                text += page.get_text() + "\n"
+            doc.close()
             return text.strip()
         except ImportError:
-            raise HTTPException(
-                status_code=500,
-                detail="PyPDF2 library not installed. Please install it: pip install PyPDF2"
-            )
+            # Fallback to PyPDF2
+            try:
+                import PyPDF2
+                text = ""
+                with open(file_path, "rb") as file:
+                    pdf_reader = PyPDF2.PdfReader(file)
+                    for page in pdf_reader.pages:
+                        text += page.extract_text() + "\n"
+                return text.strip()
+            except ImportError:
+                raise HTTPException(
+                    status_code=500,
+                    detail="PyMuPDF or PyPDF2 library not installed. Please install: pip install PyMuPDF"
+                )
         except Exception as e:
             logger.error(f"Error extracting text from PDF: {e}")
             raise HTTPException(
@@ -267,13 +299,32 @@ Chỉ trả về JSON, không giải thích thêm. Nếu không tìm thấy câu
 
         try:
             logger.info("Using Gemini to extract questions")
+            # Use default model for text extraction
             ai_response = await gemini.generate(prompt, temperature=0.3, max_tokens=2000)
-        except Exception as e:
-            logger.error(f"Gemini failed: {e}")
+        except ValueError as e:
+            logger.error(f"Gemini API key error: {e}")
             raise HTTPException(
                 status_code=503,
-                detail=f"AI service unavailable: {str(e)}"
+                detail=f"API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại cấu hình: {str(e)}"
             ) from e
+        except Exception as e:
+            logger.error(f"Gemini failed: {e}", exc_info=True)
+            error_msg = str(e).lower()
+            if 'quota' in error_msg or '429' in error_msg or 'resource exhausted' in error_msg:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Đã vượt quá giới hạn API. Vui lòng thử lại sau."
+                ) from e
+            elif 'permission denied' in error_msg or '403' in error_msg:
+                raise HTTPException(
+                    status_code=403,
+                    detail="API key không hợp lệ hoặc đã bị rò rỉ. Vui lòng kiểm tra lại API key trong cấu hình."
+                ) from e
+            else:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"AI service unavailable: {str(e)}"
+                ) from e
         
         # Parse JSON response
         # Try to extract JSON from response

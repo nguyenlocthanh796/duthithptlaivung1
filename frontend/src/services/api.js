@@ -5,13 +5,52 @@ const apiClient = axios.create({
 })
 
 export const chatWithAI = async (prompt, options = {}) => {
-  const { temperature = 0.4, max_tokens = 512 } = options
+  const { temperature = 0.4, max_tokens = 512, model } = options
   const { data } = await apiClient.post('/ai/chat', {
     prompt,
     temperature,
     max_tokens,
+    model, // Support model selection
   })
   return data
+}
+
+export const generateIllustration = async (content) => {
+  try {
+    const { data } = await apiClient.post('/ai/generate-illustration', {
+      content,
+    })
+    return data
+  } catch (error) {
+    if (error.response) {
+      const errorMessage = error.response.data?.detail || error.response.data?.message || error.message
+      const errorWithDetail = new Error(errorMessage)
+      errorWithDetail.response = error.response
+      errorWithDetail.status = error.response.status
+      throw errorWithDetail
+    }
+    throw error
+  }
+}
+
+export const processTeacherDocument = async (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const { data } = await apiClient.post('/teacher/process-document', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data
+  } catch (error) {
+    if (error.response) {
+      const errorMessage = error.response.data?.detail || error.response.data?.message || error.message
+      const errorWithDetail = new Error(errorMessage)
+      errorWithDetail.response = error.response
+      errorWithDetail.status = error.response.status
+      throw errorWithDetail
+    }
+    throw error
+  }
 }
 
 export const testAI = async () => {
@@ -54,17 +93,42 @@ export const cloneQuestion = async ({ question, correct_answer }) => {
 }
 
 export const solveComment = async (commentText) => {
-  const { data } = await apiClient.post('/ai/solve-comment', {
-    commentText,
-  })
-  return data
+  try {
+    const { data } = await apiClient.post('/ai/solve-comment', {
+      commentText,
+    })
+    return data
+  } catch (error) {
+    // Re-throw với thông tin đầy đủ để frontend có thể hiển thị
+    if (error.response) {
+      const errorMessage = error.response.data?.detail || error.response.data?.message || error.message
+      const errorWithDetail = new Error(errorMessage)
+      errorWithDetail.response = error.response
+      errorWithDetail.status = error.response.status
+      throw errorWithDetail
+    }
+    throw error
+  }
 }
 
 export const solvePost = async (postText) => {
-  const { data } = await apiClient.post('/ai/solve-post', {
-    postText,
-  })
-  return data
+  try {
+    const { data } = await apiClient.post('/ai/solve-post', {
+      postText,
+    })
+    return data
+  } catch (error) {
+    // Re-throw với thông tin đầy đủ để frontend có thể hiển thị
+    if (error.response) {
+      // Server trả về response với status code
+      const errorMessage = error.response.data?.detail || error.response.data?.message || error.message
+      const errorWithDetail = new Error(errorMessage)
+      errorWithDetail.response = error.response
+      errorWithDetail.status = error.response.status
+      throw errorWithDetail
+    }
+    throw error
+  }
 }
 
 export const extractQuestionsFromFile = async (file) => {

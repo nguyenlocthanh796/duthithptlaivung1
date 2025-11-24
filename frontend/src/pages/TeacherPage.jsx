@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import dayjs from 'dayjs'
-import { cloneQuestion } from '../services/api'
-import { extractQuestionsFromFile } from '../services/api'
+import { cloneQuestion, extractQuestionsFromFile, processTeacherDocument } from '../services/api'
 import { createExamRoom, saveQuestionBank, getExamById } from '../services/firestore'
 import { ThreeColumnLayout } from '../components/ThreeColumnLayout'
 import { useToast } from '../components/Toast'
@@ -10,7 +9,7 @@ export function TeacherPage() {
   const { success, error: showError } = useToast()
   
   // Tab state
-  const [activeTab, setActiveTab] = useState('manual') // 'manual' or 'upload'
+  const [activeTab, setActiveTab] = useState('manual') // 'manual', 'upload', or 'advanced'
   
   // Manual input state
   const [questionForm, setQuestionForm] = useState({ question: '', correct_answer: '' })
@@ -22,6 +21,10 @@ export function TeacherPage() {
   const [extractedQuestions, setExtractedQuestions] = useState([])
   const [isExtracting, setIsExtracting] = useState(false)
   const [selectedQuestions, setSelectedQuestions] = useState([])
+  
+  // Advanced processing state
+  const [processedDocument, setProcessedDocument] = useState(null)
+  const [isProcessing, setIsProcessing] = useState(false)
   
   // Exam room state
   const [examTitle, setExamTitle] = useState('Đề thi thử THPT')
@@ -325,6 +328,16 @@ export function TeacherPage() {
           >
             📄 Upload file (PDF/DOC/DOCX)
           </button>
+          <button
+            onClick={() => setActiveTab('advanced')}
+            className={`px-4 py-2 text-sm font-medium transition ${
+              activeTab === 'advanced'
+                ? 'border-b-2 border-gemini-blue text-gemini-blue'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            🚀 Xử lý nâng cao (Extract → Analyze → Convert)
+          </button>
         </div>
 
         {/* Manual Input Tab */}
@@ -619,6 +632,110 @@ export function TeacherPage() {
             )}
           </div>
         </section>
+      )}
+
+      {/* Advanced Processing Tab */}
+      {activeTab === 'advanced' && (
+        <section className="rounded-xl border border-slate-200 bg-white/90 p-6 shadow-sm">
+          <div className="flex items-baseline justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Advanced Processing</p>
+              <h2 className="text-2xl font-semibold text-slate-900">Pipeline xử lý tài liệu</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Bước 1: Trích xuất nội dung (PyMuPDF/python-docx) → 
+                Bước 2: Phân tích & Bóc tách (gemini-2.5-flash-lite) → 
+                Bước 3: Chuyển đổi & Minh họa (gemini-2.5-flash-preview-image)
+              </p>
+            </div>
+            <span className="text-xs text-slate-500">{status || 'Sẵn sàng'}</span>
+          </div>
+          
+          <div className="mt-4">
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center transition hover:border-gemini-blue hover:bg-gemini-blue/5">
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx"
+                className="hidden"
+                onChange={handleAdvancedProcess}
+                disabled={isProcessing}
+              />
+              <div className="flex-1">
+                {isProcessing ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="animate-spin">⏳</span>
+                    <span className="text-sm text-slate-600">Đang xử lý tài liệu...</span>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-2xl">🚀</span>
+                    <p className="mt-2 text-sm font-medium text-slate-700">
+                      Click để chọn file và xử lý nâng cao
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      AI sẽ trích xuất, phân tích và tạo minh họa tự động
+                    </p>
+                  </>
+                )}
+              </div>
+            </label>
+          </div>
+
+          {processedDocument && (
+            <div className="mt-6 space-y-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <h3 className="font-semibold text-slate-900 mb-2">Kết quả xử lý:</h3>
+                <div className="space-y-2 text-sm">
+                  <p><strong>Tổng câu hỏi:</strong> {processedDocument.analysis?.questions?.length || 0}</p>
+                  <p><strong>Số minh họa:</strong> {Object.keys(processedDocument.illustrations || {}).length}</p>
+                  <p><strong>Model phân tích:</strong> {processedDocument.processing?.analysisModel}</p>
+                  <p><strong>Model minh họa:</strong> {processedDocument.processing?.illustrationModel || 'N/A'}</p>
+                </div>
+              </div>
+
+              {processedDocument.analysis?.questions && processedDocument.analysis.questions.length > 0 && (
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {processedDocument.analysis.questions.map((q, idx) => (
+                    <div key={idx} className="rounded-lg border border-slate-200 p-4">
+                      <p className="font-semibold text-slate-900 mb-2">Câu {q.id || idx + 1}:</p>
+                      <p className="text-sm text-slate-700 mb-2">{q.question}</p>
+                      {q.options && (
+                        <ul className="text-sm text-slate-600 mb-2">
+                          {q.options.map((opt, optIdx) => (
+                            <li key={optIdx}>{opt}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {q.solution && (
+                        <p className="text-sm text-slate-600 italic">Giải: {q.solution}</p>
+                      )}
+                      {processedDocument.illustrations?.[q.id] && (
+                        <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                          ✓ Đã tạo minh họa
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  const dataStr = JSON.stringify(processedDocument, null, 2)
+                  const dataBlob = new Blob([dataStr], { type: 'application/json' })
+                  const url = URL.createObjectURL(dataBlob)
+                  const link = document.createElement('a')
+                  link.href = url
+                  link.download = 'processed-document.json'
+                  link.click()
+                }}
+                className="inline-flex items-center gap-2 rounded-md bg-gemini-blue px-4 py-2 text-sm font-medium text-white transition hover:bg-gemini-blue/90"
+              >
+                💾 Tải xuống kết quả (JSON)
+              </button>
+            </div>
+          )}
+        </section>
+      )}
       </div>
     </ThreeColumnLayout>
   )

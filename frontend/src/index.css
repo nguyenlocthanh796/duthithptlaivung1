@@ -8,19 +8,19 @@ body {
     'Helvetica Neue', sans-serif;
   overflow-x: hidden;
   width: 100%;
-  /* Tăng font size cho web (mobile giữ nguyên) */
-  font-size: 16px;
+  /* Tăng font size toàn bộ dự án ~12-15% */
+  font-size: 18px; /* Tăng từ 16px (12.5% tăng) */
 }
 
 @media (min-width: 768px) {
   body {
-    font-size: 17px; /* Tăng font size cho tablet+ */
+    font-size: 19px; /* Tăng từ 17px (11.8% tăng) */
   }
 }
 
 @media (min-width: 1024px) {
   body {
-    font-size: 18px; /* Tăng font size cho desktop */
+    font-size: 20px; /* Tăng từ 18px (11.1% tăng) */
   }
 }
 

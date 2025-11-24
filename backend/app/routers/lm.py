@@ -10,12 +10,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def generate_chat_with_gemini(prompt: str, temperature: float = 0.4, max_tokens: int = 512) -> str:
+async def generate_chat_with_gemini(prompt: str, temperature: float = 0.4, max_tokens: int = 512, model: str = None) -> str:
     """Chat AI chỉ dùng Gemini, không fallback sang LM Studio"""
     gemini = get_gemini_client()
     if not gemini:
         raise HTTPException(status_code=503, detail="Gemini API not available. Please set GEMINI_API_KEY in .env")
-    return await gemini.generate(prompt, temperature, max_tokens)
+    return await gemini.generate(prompt, temperature, max_tokens, model)
 
 
 @router.get("/test")
@@ -49,6 +49,7 @@ Hãy trả lời:"""
             prompt=enhanced_prompt,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
+            model=request.model,
         )
         return PromptResponse(answer=answer)
     except Exception as exc:  # pylint: disable=broad-except
@@ -141,8 +142,15 @@ QUAN TRỌNG:
         
         logger.info(f"Solving post with text length: {len(post_text)}")
         try:
-            answer = await generate_chat_with_gemini(prompt, temperature=0.2, max_tokens=300)
-            logger.info(f"Successfully generated solution, length: {len(answer)}")
+            # Use gemini-2.5-flash-preview-image for feed page solutions (supports diagrams/illustrations)
+            # This model is better for math, physics, chemistry with visual content
+            answer = await generate_chat_with_gemini(
+                prompt, 
+                temperature=0.2, 
+                max_tokens=300,
+                model="gemini-2.5-flash-preview-image"  # Priority model for feed solutions
+            )
+            logger.info(f"Successfully generated solution with gemini-2.5-flash-preview-image, length: {len(answer)}")
             return {"solution": answer, "solvedAt": None}
         except HTTPException as http_exc:
             # Re-raise HTTP exceptions (like 503 for API unavailable)
@@ -173,6 +181,40 @@ QUAN TRỌNG:
     except Exception as exc:  # pylint: disable=broad-except
         logger.error(f"Error solving post: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Lỗi khi giải bài tập: {str(exc)}") from exc
+
+
+@router.post("/generate-illustration")
+async def generate_illustration(request: dict = Body(...)):
+    """
+    Tạo minh họa toán học từ nội dung text
+    Sử dụng gemini-2.5-flash-preview-image để tạo hình ảnh minh họa
+    """
+    try:
+        content = request.get("content", "")
+        if not content or len(content.strip()) < 10:
+            raise HTTPException(status_code=400, detail="Nội dung quá ngắn. Vui lòng cung cấp ít nhất 10 ký tự.")
+        
+        gemini = get_gemini_client()
+        if not gemini:
+            raise HTTPException(status_code=503, detail="Gemini API not available")
+        
+        # Generate illustration using image model
+        illustration = await gemini.generate_image_illustration(
+            prompt=content,
+            temperature=0.7,
+            max_tokens=1024,
+        )
+        
+        return {
+            "illustration": illustration,
+            "model": "gemini-2.5-flash-lite",
+            "success": True,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error generating illustration: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Lỗi khi tạo minh họa: {str(exc)}") from exc
 
 
 @router.post("/solve-comment")
