@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 min-h-screen;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont,
+    'Helvetica Neue', sans-serif;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* KaTeX LaTeX Rendering Fixes */
+.katex {
+  font-size: 1.1em !important;
+  line-height: 1.5 !important;
+}
+
+.katex-display {
+  margin: 1em 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.katex-display > .katex {
+  display: inline-block;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Prevent layout shift when LaTeX renders */
+.katex-html {
+  min-height: 1.2em;
+}
+
+/* Fix LaTeX overflow on mobile */
+@media (max-width: 640px) {
+  .katex-display {
+    font-size: 0.9em;
+  }
+  
+  .katex {
+    font-size: 1em !important;
+  }
+}
+
+/* Smooth transitions for content changes */
+.chat-message {
+  transition: min-height 0.2s ease-in-out;
+  contain: layout style paint;
+}
+
+/* Prevent layout shift */
+.chat-message > div {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Ensure message bubbles don't break layout */
+.chat-message .rounded-2xl {
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Prevent layout shift when expanding AI answer in feed */
+.post-solution-container {
+  contain: layout style;
+  will-change: max-height;
+}
+
+/* Ensure sidebars stay fixed when content expands */
+aside[class*="sidebar"],
+aside[class*="Sidebar"] {
+  contain: layout style;
+}
+
+/* Main content area - prevent affecting sidebars */
+main[class*="flex-1"] {
+  contain: layout;
+  min-width: 0;
+}
