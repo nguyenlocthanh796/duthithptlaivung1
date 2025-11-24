@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🚀 Deploy to Production
-Backend: Google Cloud Run
-Frontend: Firebase Hosting
+🚀 Deploy to Production - Complete Deployment Script
+- Backend: Google Cloud Run
+- Frontend: Firebase Hosting  
+- Code: GitHub (Push & Sync)
 """
 
 import os
@@ -33,30 +34,37 @@ def print_header(msg):
     print(f"  {msg}")
     print("="*70 + "\n")
 
-def run_command(cmd, cwd=None, check=True):
+def run_command(cmd, cwd=None, check=True, shell=None):
     """Run command and return success status"""
+    if shell is None:
+        shell = True if os.name == "nt" else False
+    
     try:
         result = subprocess.run(
             cmd,
             cwd=cwd,
             check=check,
             capture_output=False,
-            shell=True if os.name == "nt" else False
+            shell=shell
         )
         return result.returncode == 0
     except subprocess.CalledProcessError as e:
         print(f"❌ Command failed: {e}")
         return False
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return False
 
 def check_gcloud():
     """Check if gcloud is installed"""
-    cmd = "gcloud version"
+    gcloud_cmd = "gcloud.cmd" if os.name == "nt" else "gcloud"
     try:
-        subprocess.run(cmd.split(), check=True, capture_output=True)
+        subprocess.run([gcloud_cmd, "version"], check=True, capture_output=True)
         return True
     except:
         print("❌ gcloud CLI not found!")
-        print("Install from: https://cloud.google.com/sdk/docs/install")
+        print("📥 Install from: https://cloud.google.com/sdk/docs/install")
+        print("   Or use: winget install Google.CloudSDK")
         return False
 
 def check_firebase():
@@ -67,12 +75,69 @@ def check_firebase():
         return True
     except:
         print("❌ Firebase CLI not found!")
-        print("Install: npm install -g firebase-tools")
+        print("📥 Install: npm install -g firebase-tools")
         return False
+
+def find_git():
+    """Find git executable on Windows"""
+    if os.name == "nt":
+        # Common Git installation paths on Windows
+        possible_paths = [
+            "git",  # In PATH
+            "git.exe",  # In PATH
+            r"C:\Program Files\Git\bin\git.exe",
+            r"C:\Program Files (x86)\Git\bin\git.exe",
+            r"C:\Program Files\Git\cmd\git.exe",
+            r"C:\Program Files (x86)\Git\cmd\git.exe",
+        ]
+        
+        for git_path in possible_paths:
+            try:
+                result = subprocess.run(
+                    [git_path, "--version"],
+                    check=True,
+                    capture_output=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    return git_path
+            except:
+                continue
+        
+        return None
+    else:
+        # Unix-like systems
+        try:
+            subprocess.run(["git", "--version"], check=True, capture_output=True)
+            return "git"
+        except:
+            return None
+
+def check_git():
+    """Check if git is installed"""
+    git_cmd = find_git()
+    
+    if git_cmd:
+        # Store git command for later use
+        check_git.git_cmd = git_cmd
+        return True
+    else:
+        print("❌ Git not found!")
+        print("📥 Git đã được cài nhưng không có trong PATH")
+        print("💡 Giải pháp:")
+        print("   1. Restart PowerShell/Terminal (sau khi cài Git)")
+        print("   2. Hoặc thêm Git vào PATH:")
+        print("      - Tìm: C:\\Program Files\\Git\\bin\\git.exe")
+        print("      - Thêm vào System PATH (xem SETUP_GIT_WINDOWS.md)")
+        print("   3. Hoặc dùng Git Bash thay vì PowerShell")
+        return False
+
+# Initialize git_cmd attribute
+check_git.git_cmd = None
 
 def deploy_backend():
     """Deploy backend to Cloud Run"""
-    print_header("📦 [1/2] Deploying Backend to Cloud Run")
+    print_header("📦 Deploying Backend to Cloud Run")
     
     if not check_gcloud():
         return False
@@ -90,22 +155,25 @@ def deploy_backend():
     print(f"Region: {REGION}\n")
     
     # Set project
-    run_command(f"gcloud config set project {PROJECT_ID}")
+    gcloud_cmd = "gcloud.cmd" if os.name == "nt" else "gcloud"
+    run_command([gcloud_cmd, "config", "set", "project", PROJECT_ID])
     
     # Deploy
-    cmd = f"""gcloud run deploy {SERVICE_NAME} \
-        --source . \
-        --region {REGION} \
-        --project {PROJECT_ID} \
-        --allow-unauthenticated \
-        --max-instances 1 \
-        --memory 1Gi \
-        --cpu 1 \
-        --timeout 300 \
-        --env-vars-file=env.yaml \
-        --quiet"""
+    cmd = [
+        gcloud_cmd, "run", "deploy", SERVICE_NAME,
+        "--source", ".",
+        "--region", REGION,
+        "--project", PROJECT_ID,
+        "--allow-unauthenticated",
+        "--max-instances", "1",
+        "--memory", "1Gi",
+        "--cpu", "1",
+        "--timeout", "300",
+        "--env-vars-file", "env.yaml",
+        "--quiet"
+    ]
     
-    if run_command(cmd, cwd=str(BACKEND_DIR)):
+    if run_command(cmd, cwd=str(BACKEND_DIR), shell=False):
         print("\n✅ Backend deployed successfully!")
         print(f"URL: https://{SERVICE_NAME}-626004693464.{REGION}.run.app")
         return True
@@ -115,7 +183,7 @@ def deploy_backend():
 
 def deploy_frontend():
     """Deploy frontend to Firebase Hosting"""
-    print_header("🌐 [2/2] Deploying Frontend to Firebase Hosting")
+    print_header("🌐 Deploying Frontend to Firebase Hosting")
     
     if not check_firebase():
         return False
@@ -125,18 +193,20 @@ def deploy_frontend():
     
     # Build frontend
     print("🔨 Building frontend...")
-    if not run_command([npm_cmd, "run", "build"], cwd=str(FRONTEND_DIR)):
+    if not run_command([npm_cmd, "run", "build"], cwd=str(FRONTEND_DIR), shell=False):
         print("❌ Frontend build failed!")
         return False
     
     print("\n📤 Deploying to Firebase (Hosting + Firestore)...")
-    # Use quotes for comma-separated list in PowerShell
+    # Use proper command format for PowerShell
     if os.name == "nt":
-        cmd = [firebase_cmd, "deploy", "--only", '"hosting,firestore"', "--project", PROJECT_ID]
+        cmd = f'{firebase_cmd} deploy --only "hosting,firestore" --project {PROJECT_ID}'
+        success = run_command(cmd, cwd=str(PROJECT_ROOT), shell=True)
     else:
         cmd = [firebase_cmd, "deploy", "--only", "hosting,firestore", "--project", PROJECT_ID]
+        success = run_command(cmd, cwd=str(PROJECT_ROOT), shell=False)
     
-    if run_command(cmd, cwd=str(PROJECT_ROOT)):
+    if success:
         print("\n✅ Frontend deployed successfully!")
         print(f"URL: https://{PROJECT_ID}.web.app")
         return True
@@ -144,45 +214,207 @@ def deploy_frontend():
         print("\n❌ Frontend deployment failed!")
         return False
 
+def push_to_github():
+    """Push code to GitHub"""
+    print_header("📤 Pushing Code to GitHub")
+    
+    if not check_git():
+        return False
+    
+    # Use the found git command
+    git_cmd = check_git.git_cmd or "git"
+    
+    # Check if git repo is initialized
+    git_dir = PROJECT_ROOT / ".git"
+    if not git_dir.exists():
+        print("⚠️  Git repository not initialized!")
+        response = input("Initialize git repository? [y/N]: ").strip().lower()
+        if response in ['y', 'yes']:
+            print("Initializing git repository...")
+            if not run_command([git_cmd, "init"], cwd=str(PROJECT_ROOT), shell=False):
+                return False
+            if not run_command([git_cmd, "add", "."], cwd=str(PROJECT_ROOT), shell=False):
+                return False
+            commit_msg = input("Enter commit message [Initial commit]: ").strip() or "Initial commit"
+            if not run_command([git_cmd, "commit", "-m", commit_msg], cwd=str(PROJECT_ROOT), shell=False):
+                return False
+            print("✅ Git repository initialized!")
+            print("📝 Next: Add remote and push (see SETUP_GIT_WINDOWS.md)")
+            return False
+        else:
+            return False
+    
+    # Check for changes
+    result = subprocess.run(
+        [git_cmd, "status", "--porcelain"],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True
+    )
+    
+    if not result.stdout.strip():
+        print("✅ No changes to commit")
+    else:
+        print("📝 Changes detected:")
+        print(result.stdout)
+        
+        # Ask to commit
+        response = input("\nCommit and push changes? [y/N]: ").strip().lower()
+        if response not in ['y', 'yes']:
+            print("❌ Push cancelled")
+            return False
+        
+        # Add all changes
+        print("\n📦 Adding changes...")
+        if not run_command([git_cmd, "add", "."], cwd=str(PROJECT_ROOT), shell=False):
+            return False
+        
+        # Commit
+        commit_msg = input("Enter commit message: ").strip()
+        if not commit_msg:
+            commit_msg = f"Update: {subprocess.check_output([git_cmd, 'status', '--short'], cwd=str(PROJECT_ROOT), text=True).strip()[:50]}"
+        
+        print(f"💾 Committing: {commit_msg}")
+        if not run_command([git_cmd, "commit", "-m", commit_msg], cwd=str(PROJECT_ROOT), shell=False):
+            return False
+    
+    # Check remote
+    result = subprocess.run(
+        [git_cmd, "remote", "-v"],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True
+    )
+    
+    if not result.stdout.strip():
+        print("⚠️  No remote repository configured!")
+        remote_url = input("Enter GitHub repository URL (or press Enter to skip): ").strip()
+        if remote_url:
+            print(f"Adding remote: {remote_url}")
+            if not run_command([git_cmd, "remote", "add", "origin", remote_url], cwd=str(PROJECT_ROOT), shell=False):
+                return False
+            # Set main branch
+            run_command([git_cmd, "branch", "-M", "main"], cwd=str(PROJECT_ROOT), shell=False)
+        else:
+            print("❌ Cannot push without remote repository")
+            print("📝 See: SETUP_GIT_WINDOWS.md for GitHub setup")
+            return False
+    
+    # Push
+    print("\n🚀 Pushing to GitHub...")
+    branch = "main"
+    result = subprocess.run(
+        [git_cmd, "branch", "--show-current"],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True
+    )
+    if result.stdout.strip():
+        branch = result.stdout.strip()
+    
+    if run_command([git_cmd, "push", "-u", "origin", branch], cwd=str(PROJECT_ROOT), shell=False):
+        print("\n✅ Code pushed to GitHub successfully!")
+        return True
+    else:
+        print("\n❌ Push to GitHub failed!")
+        print("💡 Tip: Check your GitHub credentials or use Personal Access Token")
+        return False
+
+def show_menu():
+    """Show deployment menu"""
+    print_header("🚀 Deployment Menu")
+    print("Select deployment option:")
+    print()
+    print("  1. 📦 Deploy Backend (Google Cloud Run)")
+    print("  2. 🌐 Deploy Frontend (Firebase Hosting)")
+    print("  3. 📤 Push Code to GitHub")
+    print("  4. 🔄 Deploy All (Backend + Frontend + GitHub)")
+    print("  5. ❌ Cancel")
+    print()
+    
+    choice = input("Enter your choice [1-5]: ").strip()
+    return choice
+
 def main():
-    print_header("🚀 Deploying to Production")
+    print_header("🚀 Complete Deployment Script")
     
     print("Deployment targets:")
     print(f"  Backend:  Google Cloud Run ({REGION})")
     print(f"  Frontend: Firebase Hosting")
+    print(f"  GitHub:   Push & Sync code")
     print(f"  Project:  {PROJECT_ID}\n")
     
-    # Ask for confirmation
-    response = input("Continue with deployment? [y/N]: ").strip().lower()
-    if response not in ['y', 'yes']:
+    # Show menu
+    choice = show_menu()
+    
+    if choice == "1":
+        # Deploy backend only
+        deploy_backend()
+    elif choice == "2":
+        # Deploy frontend only
+        deploy_frontend()
+    elif choice == "3":
+        # Push to GitHub only
+        push_to_github()
+    elif choice == "4":
+        # Deploy all
+        print_header("🔄 Deploying All Services")
+        
+        # Ask for confirmation
+        response = input("Deploy Backend, Frontend, and push to GitHub? [y/N]: ").strip().lower()
+        if response not in ['y', 'yes']:
+            print("❌ Deployment cancelled")
+            return
+        
+        results = {
+            "backend": False,
+            "frontend": False,
+            "github": False
+        }
+        
+        # Deploy backend
+        results["backend"] = deploy_backend()
+        if not results["backend"]:
+            print("\n⚠️  Backend deployment failed!")
+            continue_deploy = input("Continue with frontend? [y/N]: ").strip().lower()
+            if continue_deploy not in ['y', 'yes']:
+                return
+        
+        # Deploy frontend
+        results["frontend"] = deploy_frontend()
+        
+        # Push to GitHub
+        results["github"] = push_to_github()
+        
+        # Summary
+        print_header("📊 Deployment Summary")
+        
+        print("Results:")
+        print(f"  Backend:  {'✅ Success' if results['backend'] else '❌ Failed'}")
+        print(f"  Frontend: {'✅ Success' if results['frontend'] else '❌ Failed'}")
+        print(f"  GitHub:   {'✅ Success' if results['github'] else '❌ Failed'}")
+        print()
+        
+        if all(results.values()):
+            print("🎉 ALL DEPLOYMENTS SUCCESSFUL!\n")
+            print(f"Frontend: https://{PROJECT_ID}.web.app")
+            print(f"Backend:  https://{SERVICE_NAME}-626004693464.{REGION}.run.app")
+            print(f"API Docs: https://{SERVICE_NAME}-626004693464.{REGION}.run.app/docs")
+        elif any(results.values()):
+            print("⚠️  PARTIAL SUCCESS")
+            print("Some deployments succeeded, some failed.")
+        else:
+            print("❌ ALL DEPLOYMENTS FAILED")
+            print("Please check the errors above and try again.")
+        
+    elif choice == "5":
         print("❌ Deployment cancelled")
         return
-    
-    # Deploy backend
-    backend_ok = deploy_backend()
-    if not backend_ok:
-        print("\n⚠️  Backend deployment failed. Stop deployment.")
+    else:
+        print("❌ Invalid choice!")
         return
     
-    # Deploy frontend
-    frontend_ok = deploy_frontend()
-    
-    # Summary
-    print_header("📊 Deployment Summary")
-    
-    if backend_ok and frontend_ok:
-        print("✅ DEPLOYMENT SUCCESSFUL!\n")
-        print(f"Frontend: https://{PROJECT_ID}.web.app")
-        print(f"Backend:  https://{SERVICE_NAME}-626004693464.{REGION}.run.app")
-        print(f"API Docs: https://{SERVICE_NAME}-626004693464.{REGION}.run.app/docs")
-        print("\n🎉 All services are online!")
-    else:
-        print("❌ DEPLOYMENT FAILED")
-        print(f"Backend: {'✅' if backend_ok else '❌'}")
-        print(f"Frontend: {'✅' if frontend_ok else '❌'}")
-    
-    print("="*70 + "\n")
+    print("\n" + "="*70 + "\n")
 
 if __name__ == "__main__":
     main()
-
