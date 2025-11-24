@@ -101,34 +101,73 @@ async def solve_post(request: dict = Body(...)):
                 detail="Chỉ giải đáp các câu hỏi liên quan đến học tập. Vui lòng đảm bảo nội dung có đề bài, câu hỏi toán học, hoặc công thức."
             )
         
-        prompt = f"""Bạn là trợ lý giải đáp câu hỏi học tập THPT. Hãy trả lời NGẮN GỌN, GỌN GÀNG, TẬP TRUNG VÀO ĐÁP ÁN:
+        prompt = f"""Bạn là trợ lý giải đáp câu hỏi học tập THPT. Hãy trả lời NGẮN GỌN, GỌN GÀNG, MẠCH LẠC, TẬP TRUNG VÀO ĐÁP ÁN:
 
 {post_text}
 
-FORMAT YÊU CẦU (BẮT BUỘC):
-1. Đáp án/Kết quả: Viết ngắn gọn, đi thẳng vào vấn đề
-2. Giải thích ngắn (nếu cần): Tối đa 2-3 câu, cực kỳ xúc tích
-3. KẾT LUẬN: Phải in đậm bằng **text** (markdown bold)
+FORMAT YÊU CẦU (BẮT BUỘC - PHẢI TUÂN THỦ):
+1. **Đáp án trực tiếp**: Viết ngắn gọn, đi thẳng vào vấn đề (1-2 câu)
+2. **Cách xác định** (nếu cần): Dùng heading ## Cách xác định và danh sách số thứ tự (1., 2., 3.) để liệt kê, mỗi số thứ tự phải xuống dòng riêng
+3. **Quy tắc** (nếu cần): Dùng heading ## Quy tắc và danh sách số thứ tự (1., 2., 3.) để liệt kê, mỗi số thứ tự phải xuống dòng riêng
+4. **Ví dụ** (nếu cần): Dùng heading ## Ví dụ và danh sách số thứ tự (1., 2., 3.) để liệt kê, mỗi số thứ tự phải xuống dòng riêng
+5. **Kết luận**: PHẢI in đậm bằng **Kết luận: [nội dung]** hoặc **Kết luận:** [nội dung in đậm]
 
 VÍ DỤ FORMAT ĐÚNG:
 **Đáp án: Hóa trị Fe có thể là II hoặc III.**
 
-FeCl₂ (Fe có hóa trị II), FeCl₃ (Fe có hóa trị III).
+## Cách xác định hóa trị
+1. Dựa vào công thức hợp chất
+2. Áp dụng quy tắc hóa trị
+3. Xem xét các hợp chất phổ biến
+
+## Quy tắc hóa trị
+1. Tổng hóa trị của các nguyên tố = 0
+2. Fe trong FeCl₂ có hóa trị II
+3. Fe trong FeCl₃ có hóa trị III
+
+## Ví dụ
+1. FeCl₂: Fe có hóa trị II
+2. Fe₂O₃: Fe có hóa trị III
 
 **Kết luận: Hóa trị Fe = 2, 3 là đúng.**
 
 QUAN TRỌNG:
-- Tổng độ dài: 50-100 từ, cực kỳ ngắn gọn
-- Kết luận PHẢI in đậm bằng **text**
-- KHÔNG giải thích dài dòng
-- KHÔNG viết "Hy vọng bạn đã hiểu", "Chúc bạn học tốt"
+- Tổng độ dài: 80-150 từ, ngắn gọn nhưng đầy đủ
+- Dùng markdown: ## cho headings, - cho lists, **text** cho bold
+- KHÔNG giải thích dài dòng, KHÔNG viết "Hy vọng bạn đã hiểu"
 - Công thức toán học dùng LaTeX: $x^2$ hoặc $$\\int_0^1 x dx$$
-- Sắp xếp gọn gàng: Đáp án → Giải thích ngắn → Kết luận (in đậm)"""
+- Sắp xếp: Đáp án → Cách xác định → Quy tắc → Ví dụ → Kết luận (in đậm)
+- Mỗi phần phải rõ ràng, gọn gàng, dễ đọc"""
         
         logger.info(f"Solving post with text length: {len(post_text)}")
-        answer = await generate_chat_with_gemini(prompt, temperature=0.2, max_tokens=300)
-        logger.info(f"Successfully generated solution, length: {len(answer)}")
-        return {"solution": answer, "solvedAt": None}
+        try:
+            answer = await generate_chat_with_gemini(prompt, temperature=0.2, max_tokens=300)
+            logger.info(f"Successfully generated solution, length: {len(answer)}")
+            return {"solution": answer, "solvedAt": None}
+        except HTTPException as http_exc:
+            # Re-raise HTTP exceptions (like 503 for API unavailable)
+            raise http_exc
+        except Exception as gemini_exc:
+            # Handle Gemini API errors specifically
+            error_msg = str(gemini_exc)
+            logger.error(f"Gemini API error: {error_msg}", exc_info=True)
+            
+            # Check for specific error types
+            if "PERMISSION_DENIED" in error_msg or "403" in error_msg or "leaked" in error_msg.lower():
+                raise HTTPException(
+                    status_code=403,
+                    detail="API key không hợp lệ hoặc đã bị rò rỉ. Vui lòng kiểm tra lại API key trong cấu hình."
+                ) from gemini_exc
+            elif "QUOTA_EXCEEDED" in error_msg or "429" in error_msg:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Đã vượt quá giới hạn API. Vui lòng thử lại sau."
+                ) from gemini_exc
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Lỗi khi gọi Gemini API: {error_msg}"
+                ) from gemini_exc
     except HTTPException:
         raise
     except Exception as exc:  # pylint: disable=broad-except
@@ -151,23 +190,53 @@ async def solve_comment(request: dict = Body(...)):
                 detail="Chỉ giải đáp các câu hỏi liên quan đến học tập. Vui lòng đảm bảo nội dung có đề bài, câu hỏi toán học, hoặc công thức."
             )
         
-        prompt = f"""Bạn là trợ lý giải đáp câu hỏi học tập THPT. Hãy trả lời NGẮN GỌN, GỌN GÀNG, TẬP TRUNG VÀO ĐÁP ÁN:
+        prompt = f"""Bạn là trợ lý giải đáp câu hỏi học tập THPT. Hãy trả lời NGẮN GỌN, GỌN GÀNG, MẠCH LẠC, TẬP TRUNG VÀO ĐÁP ÁN:
 {comment_text}
 
-FORMAT YÊU CẦU (BẮT BUỘC):
-1. Đáp án/Kết quả: Viết ngắn gọn, đi thẳng vào vấn đề
-2. Giải thích ngắn (nếu cần): Tối đa 1-2 câu, cực kỳ xúc tích
-3. KẾT LUẬN: Phải in đậm bằng **text** (markdown bold)
+FORMAT YÊU CẦU (BẮT BUỘC - PHẢI TUÂN THỦ):
+1. **Đáp án trực tiếp**: Viết ngắn gọn, đi thẳng vào vấn đề (1 câu)
+2. **Giải thích ngắn** (nếu cần): Tối đa 1-2 câu, cực kỳ xúc tích
+3. **Kết luận**: Phải in đậm bằng **Kết luận: [nội dung]**
+
+VÍ DỤ FORMAT ĐÚNG:
+**Đáp án: Hóa trị Fe có thể là II hoặc III.**
+
+FeCl₂ (Fe có hóa trị II), FeCl₃ (Fe có hóa trị III).
+
+**Kết luận: Hóa trị Fe = 2, 3 là đúng.**
 
 QUAN TRỌNG:
-- Tổng độ dài: 30-60 từ, cực kỳ ngắn gọn
-- Kết luận PHẢI in đậm bằng **text**
-- KHÔNG giải thích dài dòng
-- Công thức toán học dùng LaTeX: $x^2$
-- Sắp xếp gọn gàng: Đáp án → Kết luận (in đậm)"""
+- Tổng độ dài: 40-80 từ, ngắn gọn nhưng đầy đủ
+- Dùng markdown: **text** cho bold
+- KHÔNG giải thích dài dòng, KHÔNG viết "Hy vọng bạn đã hiểu"
+- Công thức toán học dùng LaTeX: $x^2$ hoặc $$\\int_0^1 x dx$$
+- Sắp xếp: Đáp án → Giải thích ngắn → Kết luận (in đậm)
+- Mỗi phần phải rõ ràng, gọn gàng, dễ đọc"""
         
-        answer = await generate_chat_with_gemini(prompt, temperature=0.2, max_tokens=200)
-        return {"solution": answer}
+        try:
+            answer = await generate_chat_with_gemini(prompt, temperature=0.2, max_tokens=200)
+            return {"solution": answer}
+        except HTTPException as http_exc:
+            raise http_exc
+        except Exception as gemini_exc:
+            error_msg = str(gemini_exc)
+            logger.error(f"Gemini API error in solve-comment: {error_msg}", exc_info=True)
+            
+            if "PERMISSION_DENIED" in error_msg or "403" in error_msg or "leaked" in error_msg.lower():
+                raise HTTPException(
+                    status_code=403,
+                    detail="API key không hợp lệ hoặc đã bị rò rỉ. Vui lòng kiểm tra lại API key trong cấu hình."
+                ) from gemini_exc
+            elif "QUOTA_EXCEEDED" in error_msg or "429" in error_msg:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Đã vượt quá giới hạn API. Vui lòng thử lại sau."
+                ) from gemini_exc
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Lỗi khi gọi Gemini API: {error_msg}"
+                ) from gemini_exc
     except HTTPException:
         raise
     except Exception as exc:  # pylint: disable=broad-except

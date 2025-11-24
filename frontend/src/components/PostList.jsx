@@ -1,7 +1,7 @@
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
-import { InlineMath, BlockMath } from 'react-katex'
-import 'katex/dist/katex.min.css'
+import { renderTextWithLatex } from '../utils/latexRenderer'
+import logger from '../utils/logger'
 import {
   toggleLike,
   addComment,
@@ -28,7 +28,7 @@ import {
   isPostSaved,
 } from '../services/firestore'
 import { solvePost as solvePostAPI } from '../services/api'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, memo, useMemo, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from './Toast'
 
@@ -40,138 +40,7 @@ function normalizeArray(value) {
   return Object.values(value)
 }
 
-function renderTextWithLatex(text) {
-  if (!text) return <span></span>
-  const parts = []
-  let lastIndex = 0
-  
-  // Patterns to match (in priority order)
-  const blockRegex = /\$\$([^$]+)\$\$/g
-  const inlineRegex = /\$([^$]+)\$/g
-  const boldRegex = /\*\*([^*]+)\*\*/g
-  
-  const allMatches = []
-  let match
-  const usedRanges = [] // Track used ranges to avoid double matching
-
-  // First, find all block math ($$...$$) - highest priority
-  while ((match = blockRegex.exec(text)) !== null) {
-    allMatches.push({ 
-      type: 'block', 
-      start: match.index, 
-      end: match.index + match[0].length, 
-      content: match[1],
-      fullMatch: match[0]
-    })
-    usedRanges.push({ start: match.index, end: match.index + match[0].length })
-  }
-
-  // Then find inline math ($...$), but skip if inside block math
-  while ((match = inlineRegex.exec(text)) !== null) {
-    const matchStart = match.index
-    const matchEnd = match.index + match[0].length
-    
-    const isInsideBlock = usedRanges.some(range => 
-      matchStart >= range.start && matchEnd <= range.end
-    )
-    
-    if (!isInsideBlock) {
-      allMatches.push({ 
-        type: 'inline', 
-        start: matchStart, 
-        end: matchEnd, 
-        content: match[1],
-        fullMatch: match[0]
-      })
-      usedRanges.push({ start: matchStart, end: matchEnd })
-    }
-  }
-
-  // Then find bold markdown (**text**), but skip if inside math
-  while ((match = boldRegex.exec(text)) !== null) {
-    const matchStart = match.index
-    const matchEnd = match.index + match[0].length
-    
-    const isInsideMath = usedRanges.some(range => 
-      matchStart >= range.start && matchEnd <= range.end
-    )
-    
-    if (!isInsideMath) {
-      allMatches.push({ 
-        type: 'bold', 
-        start: matchStart, 
-        end: matchEnd, 
-        content: match[1],
-        fullMatch: match[0]
-      })
-      usedRanges.push({ start: matchStart, end: matchEnd })
-    }
-  }
-
-  // Sort all matches by start position
-  allMatches.sort((a, b) => a.start - b.start)
-
-  // Remove overlapping matches (keep the first one)
-  const filteredMatches = []
-  for (let i = 0; i < allMatches.length; i++) {
-    const current = allMatches[i]
-    const overlaps = filteredMatches.some(existing => 
-      (current.start >= existing.start && current.start < existing.end) ||
-      (current.end > existing.start && current.end <= existing.end) ||
-      (current.start <= existing.start && current.end >= existing.end)
-    )
-    if (!overlaps) {
-      filteredMatches.push(current)
-    }
-  }
-
-  // Render the filtered matches
-  filteredMatches.forEach((match) => {
-    if (match.start > lastIndex) {
-      const textBefore = text.substring(lastIndex, match.start)
-      // Render text before match (may contain line breaks)
-      if (textBefore) {
-        parts.push(<span key={`text-${lastIndex}`}>{textBefore}</span>)
-      }
-    }
-    try {
-      if (match.type === 'block') {
-        parts.push(
-          <div key={`math-block-${match.start}`} className="my-3 overflow-x-auto" style={{ minHeight: '2em' }}>
-            <BlockMath>{match.content.trim()}</BlockMath>
-          </div>
-        )
-      } else if (match.type === 'inline') {
-        parts.push(<InlineMath key={`math-inline-${match.start}`}>{match.content.trim()}</InlineMath>)
-      } else if (match.type === 'bold') {
-        parts.push(<strong key={`bold-${match.start}`} className="font-bold text-slate-900 dark:text-slate-100">{match.content}</strong>)
-      }
-    } catch (e) {
-      console.warn('Rendering error:', e)
-      parts.push(<span key={`error-${match.start}`} className="text-red-500">{match.fullMatch}</span>)
-    }
-    lastIndex = match.end
-  })
-
-  if (lastIndex < text.length) {
-    const remainingText = text.substring(lastIndex)
-    if (remainingText) {
-      parts.push(<span key={`text-${lastIndex}`}>{remainingText}</span>)
-    }
-  }
-
-  // Handle line breaks
-  const result = parts.length > 0 ? <>{parts}</> : <span>{text}</span>
-  
-  // Split by line breaks and render with proper spacing
-  return (
-    <div className="whitespace-pre-wrap">
-      {result}
-    </div>
-  )
-}
-
-function PostItem({ post, userId, userRoles = [], currentUser }) {
+const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentUser }) {
   const { success, error: showError } = useToast()
   const [commentText, setCommentText] = useState('')
   const [editingIndex, setEditingIndex] = useState(null)
@@ -245,7 +114,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
         success('Đã lưu bài viết')
       }
     } catch (error) {
-      console.error('Error saving post:', error)
+      logger.error('Error saving post:', error)
       showError(error.message || 'Không thể lưu bài viết. Vui lòng thử lại.')
     } finally {
       setIsSaving(false)
@@ -274,7 +143,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
     setEditSolution('')
       success('Đã cập nhật giải đáp thành công!')
     } catch (error) {
-      console.error('Error updating solution:', error)
+      logger.error('Error updating solution:', error)
       showError(error.message || 'Không thể cập nhật giải đáp. Vui lòng thử lại.')
     }
   }
@@ -286,7 +155,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
     await flagCommentSolution({ postId: post.id, commentIndex })
       success('Đã đánh dấu giải đáp là sai')
     } catch (error) {
-      console.error('Error flagging solution:', error)
+      logger.error('Error flagging solution:', error)
       showError(error.message || 'Không thể đánh dấu giải đáp. Vui lòng thử lại.')
     }
   }
@@ -308,7 +177,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       setEditPostText('')
       success('Đã cập nhật bài viết thành công!')
     } catch (error) {
-      console.error('Error saving post:', error)
+      logger.error('Error saving post:', error)
       showError(error.message || 'Không thể lưu chỉnh sửa. Vui lòng thử lại.')
     }
   }
@@ -320,7 +189,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
         await deletePost({ postId: post.id })
       success('Đã xóa bài viết thành công!')
       } catch (error) {
-        console.error('Error deleting post:', error)
+        logger.error('Error deleting post:', error)
       showError(error.message || 'Không thể xóa bài viết. Vui lòng thử lại.')
     }
   }
@@ -336,7 +205,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       await flagPost({ postId: post.id, reason: reason.trim() })
       success('Bài viết đã được báo cáo và sẽ được kiểm duyệt.')
       } catch (error) {
-        console.error('Error flagging post:', error)
+        logger.error('Error flagging post:', error)
       showError(error.message || 'Không thể báo cáo bài viết. Vui lòng thử lại.')
     }
   }
@@ -346,7 +215,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       await approvePost({ postId: post.id })
       success('Đã duyệt bài viết thành công!')
     } catch (error) {
-      console.error('Error approving post:', error)
+      logger.error('Error approving post:', error)
       showError(error.message || 'Không thể duyệt bài viết. Vui lòng thử lại.')
     }
   }
@@ -358,7 +227,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
         await rejectPost({ postId: post.id })
       success('Đã xóa bài viết vi phạm thành công!')
       } catch (error) {
-        console.error('Error rejecting post:', error)
+        logger.error('Error rejecting post:', error)
       showError(error.message || 'Không thể xóa bài viết. Vui lòng thử lại.')
     }
   }
@@ -405,14 +274,14 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
           relatedUserId: userId,
         })
         } catch (notifError) {
-          console.error('Error creating notification:', notifError)
+          logger.error('Error creating notification:', notifError)
           // Don't fail if notification fails
       }
       }
       
       success('Đã giải bài thành công!')
     } catch (error) {
-      console.error('Error solving post:', error)
+      logger.error('Error solving post:', error)
       const errorMsg = error.response?.data?.detail || error.message || 'Không thể giải bài. Vui lòng thử lại.'
       showError(errorMsg)
     } finally {
@@ -441,7 +310,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
     setEditPostSolutionText('')
       success('Đã cập nhật giải đáp thành công!')
     } catch (error) {
-      console.error('Error updating post solution:', error)
+      logger.error('Error updating post solution:', error)
       showError(error.message || 'Không thể cập nhật giải đáp. Vui lòng thử lại.')
     }
   }
@@ -453,7 +322,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
     await flagPostSolution({ postId: post.id })
       success('Đã đánh dấu giải đáp là sai')
     } catch (error) {
-      console.error('Error flagging post solution:', error)
+      logger.error('Error flagging post solution:', error)
       showError(error.message || 'Không thể đánh dấu giải đáp. Vui lòng thử lại.')
     }
   }
@@ -466,7 +335,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       setShowPostSolution(false)
       success('Đã xóa giải đáp thành công!')
     } catch (error) {
-      console.error('Error deleting post solution:', error)
+      logger.error('Error deleting post solution:', error)
       showError(error.message || 'Không thể xóa giải đáp. Vui lòng thử lại.')
     }
   }
@@ -508,7 +377,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
         relatedUserId: userId,
       })
         } catch (notifError) {
-          console.error('Error creating notification:', notifError)
+          logger.error('Error creating notification:', notifError)
           // Don't fail the comment if notification fails
         }
     }
@@ -516,7 +385,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
     setCommentText('')
       success('Đã thêm bình luận thành công!')
     } catch (error) {
-      console.error('Error adding comment:', error)
+      logger.error('Error adding comment:', error)
       showError(error.message || 'Không thể thêm bình luận. Vui lòng thử lại.')
     }
   }
@@ -578,7 +447,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
             relatedUserId: userId,
           })
         } catch (notifError) {
-          console.error('Error creating notification:', notifError)
+          logger.error('Error creating notification:', notifError)
         }
       }
       
@@ -594,7 +463,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       
       success('Đã trả lời thành công!')
     } catch (error) {
-      console.error('Error adding reply:', error)
+      logger.error('Error adding reply:', error)
       showError(error.message || 'Không thể thêm trả lời. Vui lòng thử lại.')
     }
   }
@@ -606,7 +475,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       await deleteComment({ postId: post.id, commentIndex })
       success('Đã xóa bình luận thành công!')
     } catch (error) {
-      console.error('Error deleting comment:', error)
+      logger.error('Error deleting comment:', error)
       showError(error.message || 'Không thể xóa bình luận. Vui lòng thử lại.')
     }
   }
@@ -618,7 +487,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       await deleteReply({ postId: post.id, commentIndex, replyIndex })
       success('Đã xóa trả lời thành công!')
     } catch (error) {
-      console.error('Error deleting reply:', error)
+      logger.error('Error deleting reply:', error)
       showError(error.message || 'Không thể xóa trả lời. Vui lòng thử lại.')
     }
   }
@@ -639,7 +508,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       setEditCommentText('')
       success('Đã cập nhật bình luận thành công!')
     } catch (error) {
-      console.error('Error updating comment:', error)
+      logger.error('Error updating comment:', error)
       showError(error.message || 'Không thể cập nhật bình luận. Vui lòng thử lại.')
     }
   }
@@ -670,13 +539,13 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       
       success('Đã cập nhật trả lời thành công!')
     } catch (error) {
-      console.error('Error updating reply:', error)
+      logger.error('Error updating reply:', error)
       showError(error.message || 'Không thể cập nhật trả lời. Vui lòng thử lại.')
     }
   }
 
   return (
-    <article className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+    <article className="bg-white dark:bg-slate-800 rounded border border-slate-200/30 dark:border-slate-700/30 overflow-hidden">
       {/* Post Header - Facebook Style */}
       <header className="px-4 pt-4 pb-2">
         <div className="flex items-start justify-between">
@@ -736,7 +605,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
           </button>
         )}
             {showMoreMenu && (
-              <div className="absolute right-0 top-10 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-10 min-w-[160px]">
+              <div className="absolute right-0 top-10 bg-white rounded border border-slate-200/30 dark:border-slate-800/30 py-1 z-10 min-w-[160px]">
                 <button
                   onClick={() => {
                     handleEditPost()
@@ -863,8 +732,8 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
 
       {/* Nút giải bài và kết quả giải bài */}
       {post.solution && (
-        <div className="mt-3 border border-slate-200 bg-slate-50 post-solution-container" style={{ contain: 'layout style' }}>
-          <div className="flex items-center justify-between border-b border-slate-200 p-3">
+        <div className="mt-3 border border-slate-200/50 dark:border-slate-700/50 bg-white dark:bg-slate-800 post-solution-container rounded-lg shadow-sm" style={{ contain: 'layout style' }}>
+          <div className="flex items-center justify-between border-b border-slate-200/50 dark:border-slate-700/50 p-4 bg-slate-50/50 dark:bg-slate-900/50">
             <button
               onClick={() => setShowPostSolution(!showPostSolution)}
               className="flex items-center gap-2 text-base font-semibold text-gemini-blue hover:text-gemini-blue/80 transition"
@@ -912,11 +781,11 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
             }}
           >
             {showPostSolution && (
-              <div className="p-3">
+              <div className="p-5">
                 {editingPostSolution ? (
                   <div className="space-y-2">
                     <textarea
-                      className="w-full border border-slate-200 bg-white p-2 text-sm focus:border-gemini-blue focus:outline-none focus:ring-1 focus:ring-gemini-blue"
+                      className="w-full border border-slate-200/30 dark:border-slate-700/30 bg-white dark:bg-slate-700 p-2 text-sm rounded focus:border-gemini-blue focus:outline-none focus:ring-1 focus:ring-gemini-blue"
                       rows="6"
                       value={editPostSolutionText}
                       onChange={(e) => setEditPostSolutionText(e.target.value)}
@@ -924,7 +793,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
                     <div className="flex gap-2">
                       <button
                         onClick={handleUpdatePostSolution}
-                        className="bg-gemini-blue px-3 py-1 text-sm text-white hover:bg-gemini-blue/90 transition"
+                        className="bg-gemini-blue px-3 py-1 text-sm text-white hover:bg-gemini-blue/90 transition rounded"
                       >
                         Lưu
                       </button>
@@ -933,14 +802,16 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
                           setEditingPostSolution(false)
                           setEditPostSolutionText('')
                         }}
-                        className="border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50 transition"
+                        className="border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition rounded"
                       >
                         Hủy
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-base text-slate-800">{renderTextWithLatex(post.solution)}</div>
+                  <div className="text-slate-800 dark:text-slate-200 leading-relaxed">
+                    {renderTextWithLatex(post.solution)}
+                  </div>
                 )}
               </div>
             )}
@@ -1061,7 +932,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
                       className="h-8 w-8 rounded-full object-cover flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="inline-block bg-slate-100 rounded-2xl px-3 py-2 max-w-full">
+                      <div className="inline-block bg-slate-100 dark:bg-slate-700 rounded-lg px-3 py-2 max-w-full">
                         <div className="flex items-baseline gap-2 mb-1">
                           <span className="text-sm font-semibold text-slate-900 hover:underline cursor-pointer">
                 {comment.authorName || 'Người dùng'}
@@ -1249,7 +1120,7 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
                               className="h-7 w-7 rounded-full object-cover flex-shrink-0"
                             />
                             <div className="flex-1 min-w-0">
-                              <div className="inline-block bg-slate-100 rounded-2xl px-3 py-2 max-w-full">
+                              <div className="inline-block bg-slate-100 dark:bg-slate-700 rounded-lg px-3 py-2 max-w-full">
                                 <div className="flex items-baseline gap-2 mb-1">
                                   <span className="text-sm font-semibold text-slate-900 hover:underline cursor-pointer">
                                     {reply.authorName || 'Người dùng'}
@@ -1348,16 +1219,31 @@ function PostItem({ post, userId, userRoles = [], currentUser }) {
       </div>
     </article>
   )
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison function for React.memo
+  return (
+    prevProps.post.id === nextProps.post.id &&
+    prevProps.post.likes?.length === nextProps.post.likes?.length &&
+    prevProps.post.comments?.length === nextProps.post.comments?.length &&
+    prevProps.post.text === nextProps.post.text &&
+    prevProps.post.solution === nextProps.post.solution &&
+    prevProps.userId === nextProps.userId &&
+    JSON.stringify(prevProps.userRoles) === JSON.stringify(nextProps.userRoles)
+  )
+})
 
-export function PostList({ posts, userId, userRoles = [], currentUser, lastPostElementRef, loading, onSearch }) {
-  if (!posts.length) {
+export const PostList = memo(function PostList({ posts, userId, userRoles = [], currentUser, lastPostElementRef, loading, onSearch }) {
+  // Memoize posts list to prevent unnecessary re-renders
+  const memoizedPosts = useMemo(() => posts, [posts])
+  
+  if (!memoizedPosts.length) {
     return <p className="text-center text-slate-500 text-base">Chưa có bài viết nào.</p>
   }
+  
   return (
     <div className="space-y-4">
-      {posts.map((post, index) => {
-        const isLastPost = index === posts.length - 1
+      {memoizedPosts.map((post, index) => {
+        const isLastPost = index === memoizedPosts.length - 1
         return (
           <div key={post.id} ref={isLastPost ? lastPostElementRef : null}>
             <PostItem post={post} userId={userId} userRoles={userRoles} currentUser={currentUser} />
@@ -1369,4 +1255,4 @@ export function PostList({ posts, userId, userRoles = [], currentUser, lastPostE
       )}
     </div>
   )
-}
+})

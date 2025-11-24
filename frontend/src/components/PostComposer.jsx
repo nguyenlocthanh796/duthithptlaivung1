@@ -160,7 +160,7 @@ export function PostComposer({ user }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 shadow-sm"
+      className="bg-white dark:bg-slate-800 border border-slate-200/30 dark:border-slate-700/30 rounded-md p-5"
     >
       <textarea
         className="w-full resize-none border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 p-4 text-base focus:border-gemini-blue focus:outline-none focus:ring-2 focus:ring-gemini-blue/20 rounded-lg"

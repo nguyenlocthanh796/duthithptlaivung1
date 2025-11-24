@@ -1,14 +1,16 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { useSearchParams } from 'react-router-dom'
 import { PostComposer } from '../components/PostComposer'
 import { PostList } from '../components/PostList'
-import { SearchBar } from '../components/SearchBar'
 import { ThreeColumnLayout } from '../components/ThreeColumnLayout'
 import { RightSidebarContent } from '../components/RightSidebarContent'
 import { watchPosts, getUserRoles, getMorePosts, searchPosts } from '../services/firestore'
+import logger from '../utils/logger'
 
 export function FeedPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const [posts, setPosts] = useState([])
   const [userRoles, setUserRoles] = useState([])
   const [loading, setLoading] = useState(false)
@@ -17,6 +19,24 @@ export function FeedPage() {
   const [searchFilters, setSearchFilters] = useState(null)
   const observerRef = useRef(null)
   const lastPostRef = useRef(null)
+
+  const handleSearch = useCallback((filters) => {
+    setIsSearching(true)
+    setSearchFilters(filters)
+  }, [])
+
+  // Check URL params for search query
+  useEffect(() => {
+    const query = searchParams.get('q')
+    if (query) {
+      handleSearch({
+        query,
+        subject: searchParams.get('subject') || 'all',
+        type: searchParams.get('type') || 'all',
+        time: searchParams.get('time') || 'all',
+      })
+    }
+  }, [searchParams, handleSearch])
 
   useEffect(() => {
     if (isSearching && searchFilters) {
@@ -27,7 +47,7 @@ export function FeedPage() {
         setHasMore(false)
         setLoading(false)
       }).catch((error) => {
-        console.error('Search error:', error)
+        logger.error('Search error:', error)
         setLoading(false)
       })
     } else {
@@ -56,7 +76,7 @@ export function FeedPage() {
         lastPostRef.current = morePosts[morePosts.length - 1]
       }
     } catch (error) {
-      console.error('Error loading more posts:', error)
+      logger.error('Error loading more posts:', error)
     } finally {
       setLoading(false)
     }
@@ -79,47 +99,45 @@ export function FeedPage() {
     }
   }, [user?.uid])
 
-  const handleSearch = (filters) => {
-    setIsSearching(true)
-    setSearchFilters(filters)
-  }
-
   const handleFilterChange = (filters) => {
     if (isSearching) {
       setSearchFilters(filters)
     }
   }
 
-  const handleClearSearch = () => {
+  const handleClearSearch = useCallback(() => {
     setIsSearching(false)
     setSearchFilters(null)
-  }
+    // Clear URL params
+    window.history.replaceState({}, '', '/')
+  }, [])
+
+  // Memoize filtered posts to prevent unnecessary re-renders
+  const displayPosts = useMemo(() => posts, [posts])
 
   return (
     <ThreeColumnLayout rightSidebar={<RightSidebarContent />}>
       <div className="space-y-4">
-        <section className="bg-white p-6 border border-slate-200 rounded-lg">
-          <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">News Feed</p>
-          <h2 className="text-2xl font-semibold text-slate-900">
+        <section className="bg-white dark:bg-slate-900 p-6 border border-slate-200/50 dark:border-slate-800/50 rounded-lg">
+          <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">News Feed</p>
+          <h2 className="text-2xl md:text-3xl font-semibold text-slate-900 dark:text-slate-100">
             Xin chào, {user.displayName?.split(' ')[0] || ''}!
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-base text-slate-600 dark:text-slate-400">
             Cập nhật tài liệu, hỏi đáp và chia sẻ kinh nghiệm luyện thi cùng cộng đồng.
           </p>
         </section>
         
-        <SearchBar onSearch={handleSearch} onFilterChange={handleFilterChange} />
-        
         {isSearching && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
-            <span className="text-sm text-blue-800">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center justify-between">
+            <span className="text-sm md:text-base text-blue-800 dark:text-blue-200">
               Đang tìm kiếm: {searchFilters?.query || 'Tất cả'} 
               {searchFilters?.subject !== 'all' && ` • Môn: ${searchFilters.subject}`}
               {searchFilters?.type !== 'all' && ` • Loại: ${searchFilters.type}`}
             </span>
             <button
               onClick={handleClearSearch}
-              className="text-sm text-blue-600 hover:text-blue-800 underline"
+              className="text-sm md:text-base text-blue-600 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-100 underline"
             >
               Xóa bộ lọc
             </button>
@@ -129,7 +147,7 @@ export function FeedPage() {
         {!isSearching && <PostComposer user={user} />}
         
         <PostList 
-          posts={posts} 
+          posts={displayPosts} 
           userId={user.uid} 
           userRoles={userRoles} 
           currentUser={user}

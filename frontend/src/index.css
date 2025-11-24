@@ -3,11 +3,25 @@
 @tailwind utilities;
 
 body {
-  @apply bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 min-h-screen;
+  @apply bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen;
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont,
     'Helvetica Neue', sans-serif;
   overflow-x: hidden;
   width: 100%;
+  /* Tăng font size cho web (mobile giữ nguyên) */
+  font-size: 16px;
+}
+
+@media (min-width: 768px) {
+  body {
+    font-size: 17px; /* Tăng font size cho tablet+ */
+  }
+}
+
+@media (min-width: 1024px) {
+  body {
+    font-size: 18px; /* Tăng font size cho desktop */
+  }
 }
 
 * {
@@ -30,7 +44,7 @@ html {
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: #0f172a; /* Darker for better contrast */
 }
 
 ::-webkit-scrollbar-thumb {
@@ -39,7 +53,7 @@ html {
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: #334155; /* Darker for better contrast */
 }
 
 ::-webkit-scrollbar-thumb:hover {

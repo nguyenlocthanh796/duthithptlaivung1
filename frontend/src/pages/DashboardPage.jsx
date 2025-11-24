@@ -37,12 +37,12 @@ export function DashboardPage() {
   return (
     <ThreeColumnLayout rightSidebar={rightSidebar}>
       <div className="space-y-6">
-        <section className="bg-white p-6 border border-slate-200">
-          <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Dashboard</p>
-          <h2 className="text-2xl font-semibold text-slate-900">Thống kê & Phân tích</h2>
+        <section className="bg-white dark:bg-slate-900 p-6 border border-slate-200/50 dark:border-slate-800/50 rounded-lg">
+          <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Dashboard</p>
+          <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Thống kê & Phân tích</h2>
         </section>
         <div className="grid gap-6 md:grid-cols-2">
-          <div className="bg-white border border-slate-200 p-6">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded-lg p-6">
             <h2 className="text-xl font-semibold text-slate-900 mb-4">Điểm số gần đây</h2>
             {chartData.length ? (
               <ResponsiveContainer width="100%" height={240}>
@@ -57,7 +57,7 @@ export function DashboardPage() {
               <p className="mt-8 text-center text-sm text-slate-500">Chưa có bài nộp nào.</p>
             )}
           </div>
-          <div className="bg-white border border-slate-200 p-6">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded-lg p-6">
             <h2 className="text-xl font-semibold text-slate-900 mb-4">Phân phối điểm</h2>
             {chartData.length ? (
               <ResponsiveContainer width="100%" height={240}>

@@ -7,113 +7,9 @@ import {
   getChatSession,
 } from '../services/firestore'
 import { useToast } from './Toast'
-import { InlineMath, BlockMath } from 'react-katex'
-import 'katex/dist/katex.min.css'
-
-function renderTextWithLatex(text) {
-  if (!text || typeof text !== 'string') return <span></span>
-  
-  try {
-    const parts = []
-    let lastIndex = 0
-    const blockRegex = /\$\$([^$]+)\$\$/g
-    const inlineRegex = /\$([^$]+)\$/g
-    const allMatches = []
-    let match
-
-    // Reset regex lastIndex
-    blockRegex.lastIndex = 0
-    inlineRegex.lastIndex = 0
-
-    // Find all block math first (priority)
-    try {
-      while ((match = blockRegex.exec(text)) !== null) {
-        if (match[1] && match[1].trim()) {
-          allMatches.push({
-            type: 'block',
-            start: match.index,
-            end: match.index + match[0].length,
-            content: match[1].trim(),
-          })
-        }
-      }
-    } catch (e) {
-      console.warn('Error parsing block math:', e)
-    }
-
-    // Then find inline math (avoid overlapping with block math)
-    try {
-      while ((match = inlineRegex.exec(text)) !== null) {
-        const isOverlapping = allMatches.some(
-          (bm) => match.index >= bm.start && match.index < bm.end
-        )
-        if (!isOverlapping && match[1] && match[1].trim()) {
-          allMatches.push({
-            type: 'inline',
-            start: match.index,
-            end: match.index + match[0].length,
-            content: match[1].trim(),
-          })
-        }
-      }
-    } catch (e) {
-      console.warn('Error parsing inline math:', e)
-    }
-
-    // Sort by start position
-    allMatches.sort((a, b) => a.start - b.start)
-
-    // Build parts with error handling
-    allMatches.forEach((math) => {
-      if (lastIndex < math.start) {
-        const textPart = text.substring(lastIndex, math.start)
-        if (textPart) {
-          parts.push(
-            <span key={`text-${lastIndex}`}>{textPart}</span>
-          )
-        }
-      }
-      
-      // Render LaTeX with error boundary - use React.createElement for safety
-      try {
-        if (math.type === 'block' && math.content) {
-          parts.push(
-            <div key={`math-block-${math.start}`} className="my-3 overflow-x-auto" style={{ minHeight: '2em', maxWidth: '100%' }}>
-              <BlockMath>{math.content}</BlockMath>
-            </div>
-          )
-        } else if (math.content) {
-          parts.push(
-            <InlineMath key={`math-inline-${math.start}`}>{math.content}</InlineMath>
-          )
-        }
-      } catch (latexError) {
-        // Fallback to plain text if LaTeX fails
-        console.warn('LaTeX rendering error:', latexError, math)
-        parts.push(
-          <span key={`math-error-${math.start}`} className="text-slate-600 dark:text-slate-400">
-            {math.type === 'block' ? `$$${math.content}$$` : `$${math.content}$`}
-          </span>
-        )
-      }
-      
-      lastIndex = math.end
-    })
-
-    if (lastIndex < text.length) {
-      const remainingText = text.substring(lastIndex)
-      if (remainingText) {
-        parts.push(<span key={`text-${lastIndex}`}>{remainingText}</span>)
-      }
-    }
-
-    return parts.length > 0 ? <>{parts}</> : <span>{text}</span>
-  } catch (error) {
-    console.error('Error rendering LaTeX:', error)
-    // Return plain text as fallback
-    return <span className="text-slate-800 dark:text-slate-200">{String(text)}</span>
-  }
-}
+import { renderTextWithLatex } from '../utils/latexRenderer'
+import { ChatHistorySidebar } from './ChatHistorySidebar'
+import logger from '../utils/logger'
 
 export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
   const { user } = useAuth()
@@ -128,8 +24,32 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
   const [loading, setLoading] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState(initialSessionId || null)
   const [loadingSession, setLoadingSession] = useState(false)
+  const [historySidebarOpen, setHistorySidebarOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+
+  // Detect mobile and set default sidebar state
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const mobile = window.innerWidth < 1024
+      setIsMobile(mobile)
+    }
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
+
+  // Set initial state based on screen size: Web mở, Mobile đóng
+  useEffect(() => {
+    if (isMobile === false) {
+      // Web: mở mặc định
+      setHistorySidebarOpen(true)
+    } else if (isMobile === true) {
+      // Mobile: đóng mặc định
+      setHistorySidebarOpen(false)
+    }
+  }, [isMobile])
 
   // Load session if sessionId is provided
   useEffect(() => {
@@ -163,7 +83,7 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
         showError('Không tìm thấy cuộc trò chuyện')
       }
     } catch (error) {
-      console.error('Error loading session:', error)
+      logger.error('Error loading session:', error)
       showError('Không thể tải cuộc trò chuyện. Vui lòng thử lại.')
     } finally {
       setLoadingSession(false)
@@ -208,7 +128,7 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
           setCurrentSessionId(sessionId)
           if (onSessionChange) onSessionChange(sessionId)
         } catch (error) {
-          console.error('Error creating chat session:', error)
+          logger.error('Error creating chat session:', error)
           // Continue without saving if session creation fails
           if (error.code === 'permission-denied') {
             showError('Không có quyền tạo cuộc trò chuyện. Vui lòng kiểm tra Firestore rules.')
@@ -223,7 +143,7 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
             content: userMessage,
           })
         } catch (error) {
-          console.error('Error saving message to session:', error)
+          logger.error('Error saving message to session:', error)
           // Continue without saving if message save fails
         }
       }
@@ -248,12 +168,12 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
             content: assistantMessage,
           })
         } catch (error) {
-          console.error('Error saving assistant message:', error)
+          logger.error('Error saving assistant message:', error)
           // Continue without saving
         }
       }
     } catch (error) {
-      console.error('Chat error:', error)
+      logger.error('Chat error:', error)
       setMessages((prev) => [
         ...prev,
         { 
@@ -269,6 +189,23 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
     }
   }
 
+  const handleSelectSession = (sessionId) => {
+    setCurrentSessionId(sessionId)
+    if (onSessionChange) {
+      onSessionChange(sessionId)
+    }
+    if (sessionId) {
+      loadSession(sessionId)
+    } else {
+      setMessages([
+        {
+          role: 'assistant',
+          content: 'Xin chào! Mình là trợ lý AI cho việc ôn thi. Mình có thể giúp bạn giải bài tập, tạo đề thi, giải thích kiến thức và nhiều hơn nữa. Hãy đặt câu hỏi bất kỳ!',
+        },
+      ])
+    }
+  }
+
   if (loadingSession) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -281,14 +218,79 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+    <div className="flex h-full gap-0 overflow-hidden relative">
+      {/* Chat History Sidebar - Tích hợp vào ChatPanel */}
+      <aside
+        className={`${
+          historySidebarOpen ? 'w-72' : 'w-0'
+        } transition-all duration-300 border-r border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-950 flex-shrink-0 overflow-hidden`}
+      >
+        {historySidebarOpen && (
+          <div className="h-full">
+            <ChatHistorySidebar
+              onSelectSession={handleSelectSession}
+              currentSessionId={currentSessionId}
+            />
+          </div>
+        )}
+      </aside>
+
+      {/* Toggle History Sidebar Button */}
+      <button
+        onClick={() => setHistorySidebarOpen(!historySidebarOpen)}
+        className={`absolute left-0 top-4 z-30 p-2 bg-white dark:bg-slate-950 border-r border-b border-slate-200/30 dark:border-slate-800/30 text-slate-600 dark:text-slate-400 hover:text-gemini-blue dark:hover:text-gemini-blue-light transition shadow-sm text-lg rounded-r ${
+          historySidebarOpen ? 'translate-x-72' : 'translate-x-0'
+        }`}
+        style={{ transition: 'transform 0.3s ease' }}
+        title={historySidebarOpen ? 'Ẩn lịch sử' : 'Hiện lịch sử'}
+      >
+        {historySidebarOpen ? '◀' : '▶'}
+      </button>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 border-l border-slate-200/20 dark:border-slate-800/20">
+        {/* Welcome Section - Chỉ hiện khi chưa có session */}
+        {!currentSessionId && (
+          <div className="flex-1 flex items-center justify-center p-4 md:p-6">
+            <section className="bg-white dark:bg-slate-900 p-6 md:p-8 border border-slate-200/30 dark:border-slate-800/30 rounded-md max-w-2xl w-full mx-2 md:mx-3">
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center w-20 h-20 md:w-24 md:h-24 rounded-full bg-gemini-blue mb-6">
+                  <svg
+                    className="w-10 h-10 md:w-12 md:h-12 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                    />
+                  </svg>
+                </div>
+                <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-slate-100 mb-4">
+                  Trợ lý AI học tập
+                </h1>
+                <p className="text-base md:text-lg lg:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                  Đặt câu hỏi và nhận giải đáp tức thì từ AI được tinh chỉnh cho kiến thức THPT.
+                </p>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* Chat Panel - Main Content */}
+        {currentSessionId && (
+          <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 rounded-md border border-slate-200/30 dark:border-slate-800/30 overflow-hidden mx-2 md:mx-3">
       {/* Messages Area - Gemini Style */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-6 space-y-6"
+        className="flex-1 overflow-y-auto px-4 md:px-5 py-4 md:py-5 space-y-4 md:space-y-5"
         style={{ 
-          maxHeight: 'calc(100vh - 200px)',
-          minHeight: '400px',
-          scrollBehavior: 'smooth'
+          maxHeight: 'calc(100vh - 180px)',
+          minHeight: '300px',
+          scrollBehavior: 'smooth',
+          contain: 'layout style paint'
         }}
       >
         {messages.map((message, index) => {
@@ -304,7 +306,7 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
             }`}
           >
             {safeRole === 'assistant' && (
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-gemini-blue to-gemini-green flex items-center justify-center shadow-md">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gemini-blue flex items-center justify-center">
                 <svg
                   className="w-6 h-6 text-white"
                   fill="none"
@@ -321,10 +323,10 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
               </div>
             )}
             <div
-              className={`max-w-[80%] rounded-2xl px-5 py-4 ${
+              className={`max-w-[85%] rounded-lg px-4 py-3 md:px-5 md:py-4 ${
                 safeRole === 'user'
-                  ? 'bg-gradient-to-br from-gemini-blue to-gemini-blue/90 text-white shadow-lg'
-                  : 'bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-600'
+                  ? 'bg-gemini-blue text-white'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/30 dark:border-slate-700/30'
               }`}
               style={{ 
                 minHeight: 'auto',
@@ -378,7 +380,7 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
                 />
               </svg>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4">
+            <div className="bg-slate-50 dark:bg-slate-700 border border-slate-200/30 dark:border-slate-600/30 rounded-lg px-5 py-4">
               <div className="flex gap-2">
                 <div
                   className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"
@@ -401,13 +403,13 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
       </div>
 
       {/* Input Area - Gemini Style */}
-      <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+      <div className="border-t border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-900 p-3 md:p-4">
         <form onSubmit={sendMessage} className="flex gap-3 items-end">
           <div className="flex-1 relative">
             <textarea
               id="chat-input"
               ref={inputRef}
-              className="w-full rounded-2xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-4 py-3 pr-12 text-base focus:border-gemini-blue focus:outline-none focus:ring-2 focus:ring-gemini-blue/20 resize-none shadow-sm"
+              className="w-full rounded-lg border border-slate-300/50 dark:border-slate-600/50 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-4 py-3 pr-12 text-base focus:border-gemini-blue focus:outline-none focus:ring-2 focus:ring-gemini-blue/20 resize-none"
               placeholder="Nhập câu hỏi hoặc yêu cầu..."
               value={input}
               onChange={(event) => {
@@ -427,7 +429,7 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="absolute right-2 bottom-2 w-9 h-9 rounded-full bg-gemini-blue text-white hover:bg-gemini-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center shadow-md"
+              className="absolute right-2 bottom-2 w-9 h-9 rounded-full bg-gemini-blue text-white hover:bg-gemini-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center"
               title="Gửi (Enter)"
             >
               <svg
@@ -449,6 +451,9 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange }) {
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">
           AI có thể mắc lỗi. Hãy kiểm tra thông tin quan trọng.
         </p>
+      </div>
+          </div>
+        )}
       </div>
     </div>
   )

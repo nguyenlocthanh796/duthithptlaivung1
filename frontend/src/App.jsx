@@ -1,6 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import './App.css'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
@@ -8,16 +8,26 @@ import { ProtectedLayout } from './components/ProtectedLayout'
 import { initializeRemoteConfig, isMaintenanceMode } from './services/remoteConfigService'
 import { LoginPage } from './pages/LoginPage'
 import { FeedPage } from './pages/FeedPage'
-import { ChatPage } from './pages/ChatPage'
-import { ExamRoomPage } from './pages/ExamRoomPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { TeacherPage } from './pages/TeacherPage'
-import { AdminPage } from './pages/AdminPage'
-import { LiveQuizPage } from './pages/LiveQuizPage'
-import { LiveQuizHostPage } from './pages/LiveQuizHostPage'
-import { TeacherRoute } from './components/TeacherRoute'
-import { AdminRoute } from './components/AdminRoute'
-import { ToastContainer } from './components/Toast'
+import logger from './utils/logger'
+
+// Lazy load heavy components to reduce initial bundle size
+const ChatPage = lazy(() => import('./pages/ChatPage').then(module => ({ default: module.ChatPage })))
+const ExamRoomPage = lazy(() => import('./pages/ExamRoomPage').then(module => ({ default: module.ExamRoomPage })))
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(module => ({ default: module.DashboardPage })))
+const TeacherPage = lazy(() => import('./pages/TeacherPage').then(module => ({ default: module.TeacherPage })))
+const AdminPage = lazy(() => import('./pages/AdminPage').then(module => ({ default: module.AdminPage })))
+const LiveQuizPage = lazy(() => import('./pages/LiveQuizPage').then(module => ({ default: module.LiveQuizPage })))
+const LiveQuizHostPage = lazy(() => import('./pages/LiveQuizHostPage').then(module => ({ default: module.LiveQuizHostPage })))
+const TeacherRoute = lazy(() => import('./components/TeacherRoute').then(module => ({ default: module.TeacherRoute })))
+const AdminRoute = lazy(() => import('./components/AdminRoute').then(module => ({ default: module.AdminRoute })))
+const ToastContainer = lazy(() => import('./components/Toast').then(module => ({ default: module.ToastContainer })))
+
+// Loading fallback component
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gemini-blue"></div>
+  </div>
+)
 
 const queryClient = new QueryClient()
 
@@ -27,7 +37,7 @@ function App() {
     initializeRemoteConfig().then(() => {
       if (isMaintenanceMode()) {
         // Could show maintenance page
-        console.warn('Maintenance mode is ON')
+        logger.warn('Maintenance mode is ON')
       }
     })
   }, [])
@@ -42,17 +52,78 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route element={<ProtectedLayout />}>
                 <Route index element={<FeedPage />} />
-                <Route path="/chat" element={<ChatPage />} />
-                <Route path="/exam" element={<ExamRoomPage />} />
-                <Route path="/live-quiz" element={<LiveQuizPage />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route element={<TeacherRoute />}>
-                  <Route path="/teacher" element={<TeacherPage />} />
-                  <Route path="/live-quiz/host" element={<LiveQuizHostPage />} />
+                <Route 
+                  path="/chat" 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <ChatPage />
+                    </Suspense>
+                  } 
+                />
+                <Route 
+                  path="/exam" 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <ExamRoomPage />
+                    </Suspense>
+                  } 
+                />
+                <Route 
+                  path="/live-quiz" 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <LiveQuizPage />
+                    </Suspense>
+                  } 
+                />
+                <Route 
+                  path="/dashboard" 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <DashboardPage />
+                    </Suspense>
+                  } 
+                />
+                <Route 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <TeacherRoute />
+                    </Suspense>
+                  }
+                >
+                  <Route 
+                    path="/teacher" 
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <TeacherPage />
+                      </Suspense>
+                    } 
+                  />
+                  <Route 
+                    path="/live-quiz/host" 
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <LiveQuizHostPage />
+                      </Suspense>
+                    } 
+                  />
                 </Route>
                 
-                <Route element={<AdminRoute />}>
-                  <Route path="/admin" element={<AdminPage />} />
+                <Route 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <AdminRoute />
+                    </Suspense>
+                  }
+                >
+                  <Route 
+                    path="/admin" 
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <AdminPage />
+                      </Suspense>
+                    } 
+                  />
                 </Route>
               </Route>
             </Routes>
@@ -60,7 +131,9 @@ function App() {
           </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>
-      <ToastContainer />
+      <Suspense fallback={null}>
+        <ToastContainer />
+      </Suspense>
     </div>
   )
 }

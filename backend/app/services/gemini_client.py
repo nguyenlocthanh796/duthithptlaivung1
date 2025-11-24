@@ -9,6 +9,7 @@ from google import genai
 from google.genai import types
 
 from ..config import get_settings
+from .cache import get_cached_response, set_cached_response
 
 logger = logging.getLogger(__name__)
 # Reduced workers for e2-micro (1GB RAM) - optimize memory usage
@@ -134,9 +135,25 @@ class GeminiClient:
         raise last_error or Exception("All Gemini API keys failed")
 
     async def generate(self, prompt: str, temperature: float = 0.4, max_tokens: int = 512) -> str:
-        """Async wrapper for generation with memory optimization"""
+        """
+        Async wrapper for generation with caching and memory optimization
+        
+        Checks cache first, then generates if cache miss
+        """
+        # Check cache first
+        cached_response = get_cached_response(prompt, temperature, max_tokens)
+        if cached_response:
+            logger.info("Returning cached response")
+            return cached_response
+        
+        # Cache miss - generate new response
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(_executor, self._generate_sync, prompt, temperature, max_tokens)
+        response = await loop.run_in_executor(_executor, self._generate_sync, prompt, temperature, max_tokens)
+        
+        # Cache the response
+        set_cached_response(prompt, temperature, max_tokens, response)
+        
+        return response
 
 
 gemini_client = None
