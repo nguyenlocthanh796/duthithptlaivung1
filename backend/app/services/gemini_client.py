@@ -73,7 +73,7 @@ class GeminiClient:
             self._client = genai.Client(api_key=self.api_key)
         return self._client
 
-    def _generate_sync(self, prompt: str, temperature: float = 0.4, max_tokens: int = 512, model: Optional[str] = None) -> str:
+    def _generate_sync(self, prompt: str, temperature: float = 0.4, max_tokens: int = 512, model: Optional[str] = None, image_url: Optional[str] = None) -> str:
         """Generate with automatic API key rotation on failure - optimized for multi-key usage"""
         last_error = None
         total_keys = len(self._api_keys) if self._api_keys else 0
@@ -93,10 +93,28 @@ class GeminiClient:
                 # Create client with this key (don't cache to save memory)
                 client = genai.Client(api_key=api_key)
                 
+                # Build parts list - include image if provided
+                parts = [types.Part.from_text(text=prompt)]
+                if image_url:
+                    try:
+                        # Try to use from_uri for public URLs (Firebase Storage, etc.)
+                        # Note: Gemini API may require specific URL format or authentication
+                        # If from_uri fails, we'll include URL in text prompt as fallback
+                        try:
+                            parts.append(types.Part.from_uri(uri=image_url, mime_type="image/jpeg"))
+                            logger.info(f"Including image in prompt via from_uri: {image_url}")
+                        except (AttributeError, TypeError, ValueError) as uri_error:
+                            # from_uri might not be available or URL format incorrect
+                            # Fallback: include image URL in text prompt
+                            logger.warning(f"from_uri failed for {image_url}: {uri_error}, adding URL to text prompt")
+                            parts[0] = types.Part.from_text(text=f"{prompt}\n\n[Hình ảnh đính kèm: {image_url}]")
+                    except Exception as img_error:
+                        logger.warning(f"Failed to include image {image_url}: {img_error}, continuing with text only")
+                
                 contents = [
                     types.Content(
                         role="user",
-                        parts=[types.Part.from_text(text=prompt)],
+                        parts=parts,
                     ),
                 ]
                 
@@ -194,14 +212,14 @@ Yêu cầu mô tả:
         # Will automatically fallback to gemini-2.5-flash-lite if preview-image fails
         return self._generate_sync(enhanced_prompt, temperature, max_tokens, model="gemini-2.5-flash-preview-image")
 
-    async def generate(self, prompt: str, temperature: float = 0.4, max_tokens: int = 512, model: Optional[str] = None) -> str:
+    async def generate(self, prompt: str, temperature: float = 0.4, max_tokens: int = 512, model: Optional[str] = None, image_url: Optional[str] = None) -> str:
         """
         Async wrapper for generation with caching and memory optimization
         
         Checks cache first, then generates if cache miss
         """
-        # Check cache first (include model in cache key)
-        cache_key = f"{prompt}|{temperature}|{max_tokens}|{model or self.model}"
+        # Check cache first (include model and image_url in cache key)
+        cache_key = f"{prompt}|{temperature}|{max_tokens}|{model or self.model}|{image_url or ''}"
         cached_response = get_cached_response(cache_key, temperature, max_tokens)
         if cached_response:
             logger.info("Returning cached response")
@@ -209,7 +227,7 @@ Yêu cầu mô tả:
         
         # Cache miss - generate new response
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(_executor, self._generate_sync, prompt, temperature, max_tokens, model)
+        response = await loop.run_in_executor(_executor, self._generate_sync, prompt, temperature, max_tokens, model, image_url)
         
         # Cache the response
         set_cached_response(cache_key, temperature, max_tokens, response)

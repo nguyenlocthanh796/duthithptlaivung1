@@ -10,12 +10,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def generate_chat_with_gemini(prompt: str, temperature: float = 0.4, max_tokens: int = 512, model: str = None) -> str:
-    """Chat AI chỉ dùng Gemini, không fallback sang LM Studio"""
+async def generate_chat_with_gemini(prompt: str, temperature: float = 0.4, max_tokens: int = 512, model: str = None, image_url: str = None) -> str:
+    """Chat AI chỉ dùng Gemini, không fallback sang LM Studio - hỗ trợ hình ảnh"""
     gemini = get_gemini_client()
     if not gemini:
         raise HTTPException(status_code=503, detail="Gemini API not available. Please set GEMINI_API_KEY in .env")
-    return await gemini.generate(prompt, temperature, max_tokens, model)
+    return await gemini.generate(prompt, temperature, max_tokens, model, image_url)
 
 
 @router.get("/test")
@@ -62,7 +62,7 @@ Hãy trả lời:"""
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-def is_educational_content(text: str) -> bool:
+def is_educational_content(text: str, has_image: bool = False) -> bool:
     """Kiểm tra xem nội dung có liên quan đến học tập không"""
     if not text or len(text.strip()) < 10:
         return False
@@ -90,22 +90,30 @@ def is_educational_content(text: str) -> bool:
     # Kiểm tra có số và ký tự toán học
     has_math_chars = any(char in text for char in ['+', '-', '×', '*', '/', '=', '√', '∫', '∑', 'π'])
     
+    # Nếu có hình ảnh, chấp nhận (hình ảnh có thể chứa đề bài)
+    if has_image:
+        return True
+    
     return has_keyword or has_math or has_math_chars
 
 
 @router.post("/solve-post")
 async def solve_post(request: dict = Body(...)):
-    """Giải đáp câu hỏi trong bài viết bằng Gemini"""
+    """Giải đáp câu hỏi trong bài viết bằng Gemini - hỗ trợ hình ảnh"""
     try:
         post_text = request.get("postText", "")
-        if not post_text:
-            raise HTTPException(status_code=400, detail="postText is required")
+        image_url = request.get("imageUrl", None)
         
-        # Kiểm tra nội dung có liên quan đến học tập
-        if not is_educational_content(post_text):
+        # Phải có ít nhất text hoặc image
+        if not post_text and not image_url:
+            raise HTTPException(status_code=400, detail="postText hoặc imageUrl là bắt buộc")
+        
+        # Kiểm tra nội dung có liên quan đến học tập (chấp nhận nếu có hình ảnh)
+        has_image = bool(image_url)
+        if not is_educational_content(post_text or "", has_image=has_image):
             raise HTTPException(
                 status_code=400, 
-                detail="Chỉ giải đáp các câu hỏi liên quan đến học tập. Vui lòng đảm bảo nội dung có đề bài, câu hỏi toán học, hoặc công thức."
+                detail="Chỉ giải đáp các câu hỏi liên quan đến học tập. Vui lòng đảm bảo nội dung có đề bài, câu hỏi toán học, công thức, hoặc hình ảnh chứa đề bài."
             )
         
         prompt = f"""Bạn là trợ lý giải đáp câu hỏi học tập THPT. Hãy trả lời NGẮN GỌN, GỌN GÀNG, MẠCH LẠC, TẬP TRUNG VÀO ĐÁP ÁN:
@@ -146,7 +154,17 @@ QUAN TRỌNG:
 - Sắp xếp: Đáp án → Cách xác định → Quy tắc → Ví dụ → Kết luận (in đậm)
 - Mỗi phần phải rõ ràng, gọn gàng, dễ đọc"""
         
-        logger.info(f"Solving post with text length: {len(post_text)}")
+        logger.info(f"Solving post with text length: {len(post_text)}, has_image: {has_image}")
+        
+        # Enhance prompt if image is provided
+        if image_url:
+            prompt = f"""Bạn là trợ lý giải đáp câu hỏi học tập THPT. Hãy phân tích hình ảnh đính kèm và trả lời câu hỏi.
+
+Hình ảnh đính kèm: {image_url}
+Nội dung kèm theo: {post_text if post_text else "Chỉ có hình ảnh, không có text"}
+
+{prompt}"""
+        
         try:
             # Use gemini-2.5-flash-preview-image for feed page solutions (supports diagrams/illustrations)
             # This model is better for math, physics, chemistry with visual content
@@ -154,7 +172,8 @@ QUAN TRỌNG:
                 prompt, 
                 temperature=0.2, 
                 max_tokens=300,
-                model="gemini-2.5-flash-preview-image"  # Priority model for feed solutions
+                model="gemini-2.5-flash-preview-image",  # Priority model for feed solutions
+                image_url=image_url  # Pass image URL to Gemini client
             )
             logger.info(f"Successfully generated solution with gemini-2.5-flash-preview-image, length: {len(answer)}")
             return {"solution": answer, "solvedAt": None}

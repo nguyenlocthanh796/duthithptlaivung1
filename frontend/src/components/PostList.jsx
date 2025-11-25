@@ -252,7 +252,8 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
     
     setIsSolvingPost(true)
     try {
-      const response = await solvePostAPI(post.text)
+      // Gửi cả text và imageUrl nếu có
+      const response = await solvePostAPI(post.text || '', post.imageUrl || null)
       
       if (!response?.solution) {
         throw new Error('Không nhận được giải đáp từ server')

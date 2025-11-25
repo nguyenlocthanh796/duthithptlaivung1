@@ -115,10 +115,11 @@ export const solveComment = async (commentText) => {
   }
 }
 
-export const solvePost = async (postText) => {
+export const solvePost = async (postText, imageUrl = null) => {
   try {
     const { data } = await apiClient.post('/ai/solve-post', {
-      postText,
+      postText: postText || '',
+      imageUrl: imageUrl || null,
     })
     return data
   } catch (error) {
