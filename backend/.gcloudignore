@@ -1,5 +1,5 @@
-# .dockerignore - Files to exclude from Docker build
-# This prevents API keys and sensitive files from being included in Docker image
+# .gcloudignore - Files to exclude when deploying to Cloud Run
+# This prevents API keys and sensitive files from being uploaded
 
 # Environment files with API keys
 env.yaml
@@ -7,13 +7,13 @@ env.yaml.local
 .env
 .env.local
 .env.production
-*.env
 
 # Credentials
 credentials.json
 *.json
 !package.json
 !package-lock.json
+!tsconfig.json
 
 # Python cache
 __pycache__/
@@ -57,10 +57,3 @@ dist/
 build/
 *.egg-info/
 
-# Git
-.git/
-.gitignore
-
-# Documentation
-*.md
-!README.md

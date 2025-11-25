@@ -142,23 +142,53 @@ def deploy_backend():
     if not check_gcloud():
         return False
     
-    # Check env.yaml
-    env_file = BACKEND_DIR / "env.yaml"
-    if not env_file.exists():
-        print("❌ backend/env.yaml not found!")
-        print("Create it with your environment variables")
-        return False
-    
     print("🔨 Building and deploying to Cloud Run...")
     print(f"Project: {PROJECT_ID}")
     print(f"Service: {SERVICE_NAME}")
     print(f"Region: {REGION}\n")
     
+    # ⚠️ SECURITY WARNING: Do not use env.yaml file
+    print("⚠️  SECURITY: API keys must be configured via Cloud Run Environment Variables")
+    print("   NOT via env.yaml file (to prevent key leakage)")
+    print()
+    
+    # Check if user wants to configure keys now
+    response = input("Configure API keys on Cloud Run now? [y/N]: ").strip().lower()
+    if response in ['y', 'yes']:
+        print("\n💡 Use one of these methods:")
+        print("   1. Run: python update_cloud_run_keys.py")
+        print("   2. Or use Cloud Console: https://console.cloud.google.com/run")
+        print("   3. See FIX_API_KEY_LEAK.md for detailed instructions")
+        print()
+        configure_now = input("Open update script? [y/N]: ").strip().lower()
+        if configure_now in ['y', 'yes']:
+            update_script = PROJECT_ROOT / "update_cloud_run_keys.py"
+            if update_script.exists():
+                print(f"\n📝 Running: python {update_script.name}")
+                subprocess.run([sys.executable, str(update_script)], cwd=str(PROJECT_ROOT))
+            else:
+                print("❌ update_cloud_run_keys.py not found!")
+                print("   Please configure keys manually on Cloud Console")
+        else:
+            print("⚠️  Make sure to configure API keys before deploying!")
+            confirm = input("Continue with deployment? [y/N]: ").strip().lower()
+            if confirm not in ['y', 'yes']:
+                print("❌ Deployment cancelled")
+                return False
+    else:
+        print("⚠️  WARNING: Ensure API keys are already configured on Cloud Run!")
+        print("   If not, deployment may fail or API calls will fail.")
+        confirm = input("Continue? [y/N]: ").strip().lower()
+        if confirm not in ['y', 'yes']:
+            print("❌ Deployment cancelled")
+            return False
+    
     # Set project
     gcloud_cmd = "gcloud.cmd" if os.name == "nt" else "gcloud"
     run_command([gcloud_cmd, "config", "set", "project", PROJECT_ID])
     
-    # Deploy
+    # Deploy WITHOUT env-vars-file (keys should be in Cloud Run Environment Variables)
+    # .gcloudignore will exclude env.yaml and .env files automatically
     cmd = [
         gcloud_cmd, "run", "deploy", SERVICE_NAME,
         "--source", ".",
@@ -169,16 +199,23 @@ def deploy_backend():
         "--memory", "1Gi",
         "--cpu", "1",
         "--timeout", "300",
-        "--env-vars-file", "env.yaml",
+        # REMOVED: --env-vars-file env.yaml (security risk)
+        # Environment variables should be set via Cloud Console or update_cloud_run_keys.py
         "--quiet"
     ]
     
     if run_command(cmd, cwd=str(BACKEND_DIR), shell=False):
         print("\n✅ Backend deployed successfully!")
         print(f"URL: https://{SERVICE_NAME}-626004693464.{REGION}.run.app")
+        print("\n📝 IMPORTANT: Verify API keys are configured on Cloud Run:")
+        print(f"   https://console.cloud.google.com/run/detail/{REGION}/{SERVICE_NAME}/variables")
         return True
     else:
         print("\n❌ Backend deployment failed!")
+        print("\n💡 Troubleshooting:")
+        print("   1. Check if API keys are configured on Cloud Run")
+        print("   2. Run: python update_cloud_run_keys.py")
+        print("   3. See: FIX_API_KEY_LEAK.md")
         return False
 
 def deploy_frontend():

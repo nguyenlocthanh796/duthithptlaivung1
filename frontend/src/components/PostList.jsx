@@ -699,7 +699,7 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
           </div>
         ) : (
           <div className="px-4 pb-3">
-            <div className="whitespace-pre-line text-[15px] leading-relaxed text-slate-900">
+            <div className="text-[15px] leading-relaxed text-slate-900 dark:text-slate-100">
               {renderTextWithLatex(post.text)}
             </div>
           </div>

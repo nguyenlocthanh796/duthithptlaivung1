@@ -51,10 +51,11 @@ export function renderTextWithLatex(text) {
   
   const flushParagraph = () => {
     if (currentParagraph.length > 0) {
-      const paraText = currentParagraph.join(' ').trim()
+      // Join with line breaks to preserve structure
+      const paraText = currentParagraph.join('\n').trim()
       if (paraText) {
         elements.push(
-          <p key={`para-${elements.length}`} className="text-base leading-relaxed text-slate-800 dark:text-slate-200 my-3 first:mt-0">
+          <p key={`para-${elements.length}`} className="text-base leading-relaxed text-slate-800 dark:text-slate-200 my-2 first:mt-0 whitespace-pre-line">
             {renderInlineContent(paraText)}
           </p>
         )
@@ -66,11 +67,15 @@ export function renderTextWithLatex(text) {
   lines.forEach((line, index) => {
     const trimmed = line.trim()
     
-    // Empty line - flush current blocks
+    // Empty line - flush current blocks and add spacing
     if (!trimmed) {
       flushList()
       flushNumberedList()
       flushParagraph()
+      // Add a small spacing div for empty lines to preserve structure
+      elements.push(
+        <div key={`empty-${elements.length}`} className="h-2"></div>
+      )
       return
     }
     
@@ -107,10 +112,11 @@ export function renderTextWithLatex(text) {
       return
     }
     
-    // Regular text - add to paragraph
+    // Regular text - preserve original line (with leading/trailing spaces if needed)
     flushList()
     flushNumberedList()
-    currentParagraph.push(trimmed)
+    // Keep original line to preserve spacing, but trim only if it's all whitespace
+    currentParagraph.push(line)
   })
   
   // Flush remaining
@@ -118,13 +124,40 @@ export function renderTextWithLatex(text) {
   flushNumberedList()
   flushParagraph()
   
-  return elements.length > 0 ? <div className="space-y-2">{elements}</div> : <span>{text}</span>
+  return elements.length > 0 ? <div className="space-y-1">{elements}</div> : <span className="whitespace-pre-line">{text}</span>
 }
 
 /**
  * Render inline content (bold, LaTeX) within a paragraph
+ * Preserves line breaks by splitting on \n and rendering each line separately
  */
 function renderInlineContent(text) {
+  if (!text || typeof text !== 'string') return <span></span>
+  
+  // Split by line breaks to preserve structure
+  const lines = text.split('\n')
+  if (lines.length === 1) {
+    // Single line - render normally
+    return renderInlineContentSingleLine(text)
+  }
+  
+  // Multiple lines - render each line separately
+  return (
+    <>
+      {lines.map((line, index) => (
+        <span key={index}>
+          {index > 0 && <br />}
+          {renderInlineContentSingleLine(line)}
+        </span>
+      ))}
+    </>
+  )
+}
+
+/**
+ * Render inline content for a single line (bold, LaTeX)
+ */
+function renderInlineContentSingleLine(text) {
   if (!text || typeof text !== 'string') return <span></span>
   
   const parts = []

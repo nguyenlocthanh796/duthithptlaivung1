@@ -19,6 +19,7 @@ const AdminPage = lazy(() => import('./pages/AdminPage').then(module => ({ defau
 const LiveQuizPage = lazy(() => import('./pages/LiveQuizPage').then(module => ({ default: module.LiveQuizPage })))
 const LiveQuizHostPage = lazy(() => import('./pages/LiveQuizHostPage').then(module => ({ default: module.LiveQuizHostPage })))
 const DocumentManagerPage = lazy(() => import('./pages/DocumentManagerPage').then(module => ({ default: module.DocumentManagerPage })))
+const MathVisualizerPage = lazy(() => import('./pages/MathVisualizerPage').then(module => ({ default: module.MathVisualizerPage })))
 const TeacherRoute = lazy(() => import('./components/TeacherRoute').then(module => ({ default: module.TeacherRoute })))
 const AdminRoute = lazy(() => import('./components/AdminRoute').then(module => ({ default: module.AdminRoute })))
 const ToastContainer = lazy(() => import('./components/Toast').then(module => ({ default: module.ToastContainer })))
@@ -92,6 +93,14 @@ function App() {
                   element={
                     <Suspense fallback={<LoadingSpinner />}>
                       <DocumentManagerPage />
+                    </Suspense>
+                  } 
+                />
+                <Route 
+                  path="/math-visualizer" 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <MathVisualizerPage />
                     </Suspense>
                   } 
                 />

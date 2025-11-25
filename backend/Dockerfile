@@ -16,6 +16,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
+# .dockerignore will automatically exclude env.yaml, .env, and other sensitive files
+# API keys should be set via Cloud Run Environment Variables, NOT in Docker image
 COPY . .
 
 # Create tmp_uploads directory

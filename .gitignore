@@ -19,6 +19,8 @@ backend/app/**/__pycache__/
 backend/tmp_uploads/*
 !backend/tmp_uploads/.gitkeep
 backend/.env
+backend/env.yaml
+backend/env.yaml.local
 backend/credentials.json
 *.tar.gz
 *.zip
