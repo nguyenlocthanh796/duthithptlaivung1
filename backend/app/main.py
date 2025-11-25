@@ -24,24 +24,28 @@ app = FastAPI(
     redoc_url=None
 )
 
-# CORS configuration
+# CORS configuration - MUST include Firebase Hosting URLs
 allowed_origins = settings.get_allowed_origins_list()
-# Ensure localhost variants are always included
+# Ensure localhost variants are always included for development
 localhost_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"]
-# Add Firebase Hosting URL for production
-firebase_hosting_origins = ["https://gen-lang-client-0581370080.web.app", "https://gen-lang-client-0581370080.firebaseapp.com"]
-# Add Cloudflare Pages URLs (specific URLs - add your actual Cloudflare Pages URL here)
-cloudflare_pages_origins = [
-    "https://duthi-frontend.pages.dev",  # Production Cloudflare Pages URL (UPDATE THIS with your actual URL)
-    # Add more Cloudflare Pages URLs as needed
+# Firebase Hosting URLs - CRITICAL for production
+firebase_hosting_origins = [
+    "https://gen-lang-client-0581370080.web.app",
+    "https://gen-lang-client-0581370080.firebaseapp.com"
 ]
-all_origins = list(set(allowed_origins + localhost_origins + firebase_hosting_origins + cloudflare_pages_origins))  # Remove duplicates
+# Cloudflare Pages URLs (if used)
+cloudflare_pages_origins = [
+    "https://duthi-frontend.pages.dev",
+]
+# Combine all origins and remove duplicates
+all_origins = list(set(allowed_origins + localhost_origins + firebase_hosting_origins + cloudflare_pages_origins))
 logger.info(f"CORS allowed origins: {all_origins}")
 
+# CORS Middleware - MUST be added before routes
 app.add_middleware(
     CORSMiddleware,
     allow_origins=all_origins,
-    # Support Cloudflare Pages preview deployments with regex (all *.pages.dev subdomains)
+    # Support Cloudflare Pages preview deployments with regex
     allow_origin_regex=r"https://.*\.pages\.dev",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],

@@ -234,13 +234,33 @@ def deploy_frontend():
         print("❌ Frontend build failed!")
         return False
     
-    print("\n📤 Deploying to Firebase (Hosting + Firestore)...")
+    # Check if firestore.indexes.json exists and has indexes
+    indexes_file = PROJECT_ROOT / "firestore.indexes.json"
+    if indexes_file.exists():
+        try:
+            import json
+            with open(indexes_file, 'r', encoding='utf-8') as f:
+                indexes_data = json.load(f)
+            indexes_count = len(indexes_data.get('indexes', []))
+            if indexes_count > 0:
+                print(f"📊 Found {indexes_count} Firestore indexes to deploy")
+            else:
+                print("⚠️  firestore.indexes.json is empty!")
+                print("   Run: python export_firestore_indexes.py to export current indexes")
+        except Exception as e:
+            print(f"⚠️  Could not read firestore.indexes.json: {e}")
+    else:
+        print("⚠️  firestore.indexes.json not found!")
+        print("   Run: python export_firestore_indexes.py to export current indexes")
+    
+    print("\n📤 Deploying to Firebase (Hosting + Firestore Rules + Indexes)...")
     # Use proper command format for PowerShell
+    # Deploy firestore includes: rules, indexes, and fieldOverrides
     if os.name == "nt":
-        cmd = f'{firebase_cmd} deploy --only "hosting,firestore" --project {PROJECT_ID}'
+        cmd = f'{firebase_cmd} deploy --only "hosting,firestore:rules,firestore:indexes" --project {PROJECT_ID}'
         success = run_command(cmd, cwd=str(PROJECT_ROOT), shell=True)
     else:
-        cmd = [firebase_cmd, "deploy", "--only", "hosting,firestore", "--project", PROJECT_ID]
+        cmd = [firebase_cmd, "deploy", "--only", "hosting,firestore:rules,firestore:indexes", "--project", PROJECT_ID]
         success = run_command(cmd, cwd=str(PROJECT_ROOT), shell=False)
     
     if success:
@@ -337,8 +357,16 @@ def push_to_github():
             print("📝 See: SETUP_GIT_WINDOWS.md for GitHub setup")
             return False
     
-    # Push
-    print("\n🚀 Pushing to GitHub...")
+    # Check if we need to pull first
+    print("\n🔄 Checking remote changes...")
+    result = subprocess.run(
+        [git_cmd, "fetch", "origin"],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True
+    )
+    
+    # Check if local branch is behind remote
     branch = "main"
     result = subprocess.run(
         [git_cmd, "branch", "--show-current"],
@@ -349,12 +377,74 @@ def push_to_github():
     if result.stdout.strip():
         branch = result.stdout.strip()
     
+    # Check if local is behind remote
+    result = subprocess.run(
+        [git_cmd, "rev-list", "--left-right", f"{branch}...origin/{branch}"],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True
+    )
+    
+    has_remote_changes = False
+    if result.returncode == 0 and result.stdout.strip():
+        # Check if there are commits in remote that we don't have
+        remote_commits = [line for line in result.stdout.strip().split('\n') if line.startswith('>')]
+        if remote_commits:
+            has_remote_changes = True
+    
+    if has_remote_changes:
+        print("⚠️  Remote repository has changes that you don't have locally!")
+        print("   This usually happens when:")
+        print("   - Someone else pushed code")
+        print("   - You made changes on GitHub (web interface)")
+        print("   - README or other files were updated on GitHub")
+        print()
+        
+        response = input("Pull and merge remote changes? [Y/n]: ").strip().lower()
+        if response not in ['n', 'no']:
+            print("\n📥 Pulling remote changes...")
+            
+            # Try to pull with merge
+            pull_result = subprocess.run(
+                [git_cmd, "pull", "origin", branch, "--no-rebase"],
+                cwd=str(PROJECT_ROOT),
+                capture_output=True,
+                text=True
+            )
+            
+            if pull_result.returncode != 0:
+                # Check if there are merge conflicts
+                if "CONFLICT" in pull_result.stdout or "conflict" in pull_result.stdout.lower():
+                    print("\n❌ Merge conflicts detected!")
+                    print("   You need to resolve conflicts manually:")
+                    print(f"   1. Check conflicts: git status")
+                    print(f"   2. Resolve conflicts in the files")
+                    print(f"   3. Commit: git commit")
+                    print(f"   4. Push: git push")
+                    return False
+                else:
+                    print(f"❌ Pull failed: {pull_result.stderr}")
+                    print("\n💡 Try manually:")
+                    print(f"   git pull origin {branch}")
+                    return False
+            else:
+                print("✅ Successfully pulled and merged remote changes!")
+        else:
+            print("❌ Cannot push without pulling. Deployment cancelled.")
+            return False
+    
+    # Push
+    print("\n🚀 Pushing to GitHub...")
     if run_command([git_cmd, "push", "-u", "origin", branch], cwd=str(PROJECT_ROOT), shell=False):
         print("\n✅ Code pushed to GitHub successfully!")
         return True
     else:
         print("\n❌ Push to GitHub failed!")
-        print("💡 Tip: Check your GitHub credentials or use Personal Access Token")
+        print("\n💡 Troubleshooting:")
+        print("   1. Check your GitHub credentials")
+        print("   2. Use Personal Access Token if needed")
+        print("   3. Try manually: git push origin " + branch)
+        print("   4. If still fails, check: git status")
         return False
 
 def show_menu():

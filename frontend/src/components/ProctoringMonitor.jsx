@@ -23,13 +23,13 @@ export function ProctoringMonitor({ onAlert }) {
           if (videoRef.current?.readyState === 4) {
             const detections = await analyzeFrame(videoRef.current)
             if (detections.length === 0) {
-              setStatus('⚠️ Không thấy học sinh')
+              setStatus('Không thấy học sinh')
               onAlert?.('Không phát hiện khuôn mặt')
             } else if (detections.length > 1) {
-              setStatus('⚠️ Nhiều hơn 1 người trong khung hình')
+              setStatus('Nhiều hơn 1 người trong khung hình')
               onAlert?.('Phát hiện nhiều khuôn mặt')
             } else {
-              setStatus('✅ Đang giám sát bình thường')
+              setStatus('Đang giám sát bình thường')
             }
           }
         }, 4000)
@@ -48,7 +48,7 @@ export function ProctoringMonitor({ onAlert }) {
   }, [onAlert])
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+    <div className="rounded border border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-900 p-4">
       <div className="flex items-center justify-between text-xs text-slate-500">
         <p className="font-semibold text-slate-900">AI Giám thị</p>
         <span>{status}</span>

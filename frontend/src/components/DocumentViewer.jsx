@@ -53,12 +53,12 @@ export function DocumentViewer({ document, onClose }) {
   if (fileType === 'pdf') {
     return createPortal(
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
+        <div className="bg-white dark:bg-slate-900 rounded-lg w-full max-w-6xl h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/30 dark:border-slate-800/30">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded">
-                <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded">
+                <svg className="w-5 h-5 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
               </div>
@@ -107,7 +107,7 @@ export function DocumentViewer({ document, onClose }) {
             {error && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-800">
                 <div className="text-center p-6">
-                  <svg className="w-12 h-12 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">{error}</p>
@@ -142,12 +142,12 @@ export function DocumentViewer({ document, onClose }) {
   if (docViewerUrl) {
     return createPortal(
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
+        <div className="bg-white dark:bg-slate-900 rounded-lg w-full max-w-6xl h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/30 dark:border-slate-800/30">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded">
-                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded">
+                <svg className="w-5 h-5 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
               </div>
@@ -196,7 +196,7 @@ export function DocumentViewer({ document, onClose }) {
             {error && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-800">
                 <div className="text-center p-6">
-                  <svg className="w-12 h-12 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">{error}</p>
@@ -226,7 +226,7 @@ export function DocumentViewer({ document, onClose }) {
   // Fallback: show download button
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-md p-6">
+      <div className="bg-white dark:bg-slate-900 rounded-lg w-full max-w-md p-6">
         <div className="text-center">
           <svg className="w-16 h-16 text-slate-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />

@@ -35,9 +35,9 @@ export function AITutorExplanation({ question, studentAnswer, correctAnswer, sub
 
   if (explanation) {
     return (
-      <div className="mt-4 p-4 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800">
+      <div className="mt-4 p-4 rounded-lg bg-gemini-blue/5 dark:bg-gemini-blue/10 border border-gemini-blue/20 dark:border-gemini-blue/30">
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
+          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gemini-blue flex items-center justify-center">
             <svg
               className="w-6 h-6 text-white"
               fill="none"
@@ -53,18 +53,28 @@ export function AITutorExplanation({ question, studentAnswer, correctAnswer, sub
             </svg>
           </div>
           <div className="flex-1">
-            <h4 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2">
-              💡 Gia sư AI giải thích
-            </h4>
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="w-5 h-5 text-gemini-blue dark:text-gemini-blue-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <h4 className="text-lg font-semibold text-gemini-blue dark:text-gemini-blue-light">
+                Gia sư AI giải thích
+              </h4>
+            </div>
             <p className="text-base text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
               {explanation}
             </p>
             
             {hints.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
-                <h5 className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-2">
-                  📌 Mẹo nhớ:
-                </h5>
+              <div className="mt-4 pt-4 border-t border-gemini-blue/20 dark:border-gemini-blue/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-4 h-4 text-gemini-blue dark:text-gemini-blue-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                  <h5 className="text-sm font-semibold text-gemini-blue dark:text-gemini-blue-light">
+                    Mẹo nhớ:
+                  </h5>
+                </div>
                 <ul className="space-y-1">
                   {hints.map((hint, index) => (
                     <li key={index} className="text-sm text-slate-600 dark:text-slate-400">
@@ -80,7 +90,7 @@ export function AITutorExplanation({ question, studentAnswer, correctAnswer, sub
                 setExplanation(null)
                 setHints([])
               }}
-              className="mt-4 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+              className="mt-4 text-sm text-gemini-blue dark:text-gemini-blue-light hover:text-gemini-blue/80 dark:hover:text-gemini-blue-light/80 transition"
             >
               Ẩn giải thích
             </button>
@@ -94,7 +104,7 @@ export function AITutorExplanation({ question, studentAnswer, correctAnswer, sub
     <button
       onClick={handleExplain}
       disabled={loading}
-      className="mt-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
+      className="mt-2 px-4 py-2 bg-gemini-blue text-white rounded-lg hover:bg-gemini-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
     >
       {loading ? (
         <>

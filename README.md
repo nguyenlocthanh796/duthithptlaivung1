@@ -118,6 +118,8 @@ gcloud config set project gen-lang-client-0581370080
 
 ### 🤖 AI-Powered (Gemini 2.5 Flash Lite)
 - Chat với AI để học tập
+- Upload file (PDF, PNG, JPG, DOC, DOCX) và ảnh trong chat
+- Chụp ảnh trực tiếp trên mobile
 - Tạo câu hỏi và đáp án nhiễu
 - Trích xuất câu hỏi từ PDF/DOC
 - Multi-API key rotation (tối ưu quota)
@@ -133,6 +135,8 @@ gcloud config set project gen-lang-client-0581370080
 - Thảo luận học tập
 - System roles (Admin, Teacher, Student)
 - Comments & reactions
+- Upload và quản lý tài liệu (PDF, DOC, DOCX)
+- Xem ảnh trong popup modal
 
 ### 🎥 Proctoring (Giám sát thi)
 - Face detection (face-api.js)
@@ -339,10 +343,8 @@ lsof -ti:8000 | xargs kill -9
 
 ## 📖 Documentation
 
-- **QUICK_START.md** - Quick reference guide
-- **DEPLOYMENT_COMPLETE.md** - Full deployment info
-- **FIX_FIREBASE_AUTH.md** - Firebase troubleshooting
-- **test-deployment.ps1** - Test script
+- **FIX_CORS_500_ERROR.md** - Khắc phục lỗi CORS và 500 Error
+- **export_firestore_indexes.py** - Export Firestore indexes từ Firebase
 
 ---
 

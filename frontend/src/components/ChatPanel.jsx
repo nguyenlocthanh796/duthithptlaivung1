@@ -9,6 +9,7 @@ import {
 import { useToast } from './Toast'
 import { renderTextWithLatex } from '../utils/latexRenderer'
 import { ChatHistorySidebar } from './ChatHistorySidebar'
+import { uploadImage, uploadDocument } from '../services/storageService'
 import logger from '../utils/logger'
 
 export function ChatPanel({ sessionId: initialSessionId, onSessionChange, hideHistorySidebar = false }) {
@@ -24,9 +25,13 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange, hideHi
   const [loading, setLoading] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState(initialSessionId || null)
   const [loadingSession, setLoadingSession] = useState(false)
-  const [selectedModel, setSelectedModel] = useState('auto') // 'auto', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-preview-image'
+  const [attachedFile, setAttachedFile] = useState(null)
+  const [attachedFileUrl, setAttachedFileUrl] = useState(null)
+  const [uploadingFile, setUploadingFile] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
 
   // Load session if sessionId is provided
   useEffect(() => {
@@ -125,19 +130,14 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange, hideHi
         }
       }
 
-      // Auto-detect model based on content
-      let modelToUse = null
-      if (selectedModel === 'auto') {
-        // Always use gemini-2.5-flash-lite as default
-        modelToUse = 'gemini-2.5-flash-lite'
-      } else {
-        modelToUse = selectedModel === 'gemini-2.5-flash-preview-image' 
-          ? 'gemini-2.5-flash-lite' // Fallback to flash-lite if preview-image is selected
-          : selectedModel
-      }
+      // Always use gemini-2.5-flash-lite
+      const modelToUse = 'gemini-2.5-flash-lite'
 
-      // Get AI response with selected model
-      const response = await chatWithAI(userMessage, { model: modelToUse })
+      // Get AI response (include imageUrl if attached)
+      const response = await chatWithAI(userMessage, { 
+        model: modelToUse, 
+        ...(attachedFileUrl && { imageUrl: attachedFileUrl })
+      })
       // Handle different response formats
       const assistantMessage = response?.answer || response?.response || response?.text || response || 'Xin lỗi, không nhận được phản hồi từ AI.'
 
@@ -173,8 +173,58 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange, hideHi
       showError('Không thể kết nối đến AI. Vui lòng thử lại.')
     } finally {
       setLoading(false)
+      setAttachedFile(null)
+      setAttachedFileUrl(null)
       inputRef.current?.focus()
     }
+  }
+
+  const handleFileSelect = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const fileType = file.type.toLowerCase()
+    const isImage = fileType.startsWith('image/')
+    const isPDF = fileType === 'application/pdf'
+    const isDocument = fileType.includes('word') || fileType.includes('document')
+
+    if (!isImage && !isPDF && !isDocument) {
+      showError('Chỉ hỗ trợ file: PNG, JPG, PDF, DOC, DOCX')
+      return
+    }
+
+    setUploadingFile(true)
+    try {
+      let url
+      if (isImage) {
+        url = await uploadImage(file)
+      } else {
+        url = await uploadDocument(file)
+      }
+      setAttachedFile(file)
+      setAttachedFileUrl(url)
+      success('Đã tải file lên thành công!')
+    } catch (error) {
+      logger.error('Error uploading file:', error)
+      showError('Không thể tải file. Vui lòng thử lại.')
+    } finally {
+      setUploadingFile(false)
+      // Reset input
+      if (event.target) {
+        event.target.value = ''
+      }
+    }
+  }
+
+  const handleCameraCapture = () => {
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click()
+    }
+  }
+
+  const removeAttachedFile = () => {
+    setAttachedFile(null)
+    setAttachedFileUrl(null)
   }
 
   const handleSelectSession = (sessionId) => {
@@ -397,19 +447,80 @@ export function ChatPanel({ sessionId: initialSessionId, onSessionChange, hideHi
       ) : (
         /* Input ở dưới cùng khi đã có session */
         <div className="flex-shrink-0 border-t border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-900 p-3 md:p-4">
-          {/* Model Selection */}
-          <div className="flex items-center justify-center gap-2 mb-2 max-w-4xl mx-auto">
-            <span className="text-xs text-slate-500 dark:text-slate-400">Model:</span>
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-gemini-blue"
-            >
-              <option value="auto">Tự động (Flash Lite)</option>
-              <option value="gemini-2.5-flash-lite">Flash Lite</option>
-            </select>
-          </div>
-          <form onSubmit={sendMessage} className="flex gap-3 items-end max-w-4xl mx-auto">
+          {/* Attached File Preview */}
+          {attachedFile && (
+            <div className="max-w-4xl mx-auto mb-2 flex items-center gap-2 p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">
+              <div className="flex-1 flex items-center gap-2 min-w-0">
+                {attachedFile.type.startsWith('image/') ? (
+                  <svg className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                )}
+                <span className="text-sm text-slate-700 dark:text-slate-300 truncate">
+                  {attachedFile.name}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={removeAttachedFile}
+                className="p-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                title="Xóa file"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+          <form onSubmit={sendMessage} className="flex gap-2 items-end max-w-4xl mx-auto">
+            {/* File Upload Buttons */}
+            <div className="flex gap-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingFile || loading}
+                className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition disabled:opacity-50"
+                title="Tải file (PDF, PNG, JPG, DOC, DOCX)"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
+              {/* Camera button - chỉ hiện trên mobile */}
+              {typeof window !== 'undefined' && window.innerWidth < 768 ? (
+                <button
+                  type="button"
+                  onClick={handleCameraCapture}
+                  disabled={uploadingFile || loading}
+                  className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition disabled:opacity-50"
+                  title="Chụp ảnh"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              ) : null}
+            </div>
             <div className="flex-1 relative">
               <textarea
                 id="chat-input"

@@ -55,20 +55,24 @@ def extract_json_from_text(text: str) -> dict:
 
 async def generate_with_gemini(prompt: str, temperature: float = 0.5, max_tokens: int = 800, model: str = None) -> str:
     """Generate text using Gemini API with automatic multi-key rotation."""
-    gemini = get_gemini_client()
-    if not gemini:
-        raise HTTPException(
-            status_code=503,
-            detail="Gemini API not available. Please set GEMINI_API_KEY or GEMINI_API_KEYS in .env"
-        )
-    
     try:
+        gemini = get_gemini_client()
+        if not gemini:
+            logger.error("Gemini client not available")
+            raise HTTPException(
+                status_code=503,
+                detail="Gemini API not available. Please set GEMINI_API_KEY or GEMINI_API_KEYS in environment variables."
+            )
+        
         logger.info(f"Generating with Gemini API (model: {model or 'default'})")
         result = await gemini.generate(prompt, temperature, max_tokens, model)
         logger.info(f"Successfully generated {len(result)} characters with Gemini")
         return result
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except ValueError as e:
-        logger.error(f"Gemini API key error: {e}")
+        logger.error(f"Gemini API key error: {e}", exc_info=True)
         raise HTTPException(
             status_code=503,
             detail=f"API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại cấu hình: {str(e)}"
@@ -96,19 +100,19 @@ async def generate_with_gemini(prompt: str, temperature: float = 0.5, max_tokens
 @router.post("/clone", response_model=QuestionCloneResult)
 async def clone_question(payload: QuestionCloneRequest):
     """Clone a question and generate variants with distractors."""
-    # Validation
-    if not payload.question or not payload.question.strip():
-        raise HTTPException(status_code=400, detail="Câu hỏi không được để trống")
-    
-    if not payload.correct_answer or not payload.correct_answer.strip():
-        raise HTTPException(status_code=400, detail="Đáp án đúng không được để trống")
-    
-    prompt = PROMPT_TEMPLATE.format(
-        question=payload.question.strip(),
-        answer=payload.correct_answer.strip()
-    )
-    
     try:
+        # Validation
+        if not payload.question or not payload.question.strip():
+            raise HTTPException(status_code=400, detail="Câu hỏi không được để trống")
+        
+        if not payload.correct_answer or not payload.correct_answer.strip():
+            raise HTTPException(status_code=400, detail="Đáp án đúng không được để trống")
+        
+        prompt = PROMPT_TEMPLATE.format(
+            question=payload.question.strip(),
+            answer=payload.correct_answer.strip()
+        )
+        
         logger.info(f"Generating variants for question: {payload.question[:50]}...")
         # Use default model for question cloning (will use gemini-2.5-flash-lite if available)
         raw = await generate_with_gemini(prompt, temperature=0.5, max_tokens=800)

@@ -111,7 +111,9 @@ export function Navbar() {
             className="flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-gemini-blue dark:hover:text-gemini-blue-light hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition font-medium"
             title="AI Chat"
           >
-            <span className="text-xl">💬</span>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
             <span className="text-lg">AI Chat</span>
           </Link>
           <Link
@@ -119,7 +121,9 @@ export function Navbar() {
             className="flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-gemini-blue dark:hover:text-gemini-blue-light hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition font-medium"
             title="Phòng Thi"
           >
-            <span className="text-xl">📝</span>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
             <span className="text-base">Phòng Thi</span>
           </Link>
           {showLiveQuiz && (
@@ -128,7 +132,10 @@ export function Navbar() {
               className="flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-gemini-blue dark:hover:text-gemini-blue-light hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition font-medium"
               title="Live Quiz"
             >
-              <span className="text-xl">🎮</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
               <span className="text-base">Live Quiz</span>
             </Link>
           )}
@@ -139,7 +146,9 @@ export function Navbar() {
               className="flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-gemini-blue dark:hover:text-gemini-blue-light hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition font-medium"
               title="Teacher"
             >
-              <span className="text-xl">👨‍🏫</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
               <span className="text-base">Teacher</span>
             </Link>
           )}
@@ -149,7 +158,10 @@ export function Navbar() {
               className="flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-gemini-blue dark:hover:text-gemini-blue-light hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition font-medium"
               title="Admin"
             >
-              <span className="text-xl">⚙️</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
               <span className="text-base">Admin</span>
             </Link>
           )}
@@ -237,7 +249,7 @@ export function Navbar() {
           
           {/* Search Dropdown */}
           {showSearchDropdown && searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200/30 dark:border-slate-800/30 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200/30 dark:border-slate-800/30 rounded-lg z-50 max-h-96 overflow-y-auto">
               {searchResults.map((post) => (
                 <Link
                   key={post.id}
@@ -251,7 +263,7 @@ export function Navbar() {
                   <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2">
                     {post.text?.substring(0, 100)}...
                   </p>
-                </Link>
+        </Link>
               ))}
             </div>
           )}
@@ -264,23 +276,23 @@ export function Navbar() {
           
           {/* User Avatar - Chỉ hiện icon */}
           <div className="relative group">
-            <img
-              src={user?.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${user?.displayName}`}
-              alt={user?.displayName}
+          <img
+            src={user?.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${user?.displayName}`}
+            alt={user?.displayName}
               className="h-9 w-9 md:h-10 md:w-10 rounded-full border-2 border-slate-200 dark:border-slate-700 object-cover cursor-pointer hover:border-gemini-blue dark:hover:border-gemini-blue-light transition"
             />
             {/* Dropdown menu */}
-            <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200/30 dark:border-slate-800/30 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+            <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200/30 dark:border-slate-800/30 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
               <div className="p-4 border-b border-slate-200 dark:border-slate-800">
                 <p className="font-semibold text-slate-900 dark:text-slate-100 text-base">{user?.displayName}</p>
                 <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{user?.email}</p>
               </div>
-              <button
-                onClick={logout}
+          <button
+            onClick={logout}
                 className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-              >
-                Đăng xuất
-              </button>
+          >
+            Đăng xuất
+          </button>
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { renderTextWithLatex } from '../utils/latexRenderer'
 import { SolutionModal } from './SolutionModal'
+import { ImageModal } from './ImageModal'
 import logger from '../utils/logger'
 import {
   toggleLike,
@@ -62,6 +63,7 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
   const [savedPosts, setSavedPosts] = useState(new Set())
   const [isSaving, setIsSaving] = useState(false)
   const [showSolutionModal, setShowSolutionModal] = useState(false)
+  const [showImageModal, setShowImageModal] = useState(false)
   
   // Load saved posts
   useEffect(() => {
@@ -650,9 +652,11 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
                       handleDeletePost()
                       setShowMoreMenu(false)
                     }}
-                    className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 text-left flex items-center gap-2"
+                    className="w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left flex items-center gap-2 transition"
                   >
-                    <span>🗑️</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
                     <span>Xóa bài viết</span>
                   </button>
                 )}
@@ -690,9 +694,12 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
               {isPostAuthor && (
                 <button
                   onClick={handleDeletePost}
-                  className="border border-gemini-red px-4 py-2 text-base font-medium text-gemini-red hover:bg-gemini-red/10 transition"
+                  className="border border-slate-300 dark:border-slate-600 px-4 py-2 text-base font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition rounded flex items-center gap-2"
                 >
-                  🗑️ Xóa
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Xóa</span>
                 </button>
               )}
             </div>
@@ -708,11 +715,11 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
 
       {/* Hiển thị ảnh */}
       {post.imageUrl && (
-        <div className="mt-3">
+        <div className="mt-3 cursor-pointer" onClick={() => setShowImageModal(true)}>
           <img
             src={post.imageUrl}
             alt="Bài viết"
-            className="max-h-96 w-full border border-slate-200 object-contain"
+            className="max-h-96 w-full border border-slate-200 dark:border-slate-700 object-contain hover:opacity-90 transition"
           />
         </div>
       )}
@@ -725,33 +732,46 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
           rel="noreferrer"
           className="mt-3 flex items-center gap-2 border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition hover:border-gemini-blue hover:bg-gemini-blue/5"
         >
-          <span className="text-lg">
-            {post.documentType === 'pdf' ? '📄' : '📝'}
-          </span>
+          <svg className="w-5 h-5 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
           <span>
             {post.documentType === 'pdf' ? 'Xem tài liệu PDF' : `Xem tài liệu ${post.documentType.toUpperCase()}`}
           </span>
-          <span className="ml-auto">🔗</span>
+          <svg className="w-4 h-4 text-slate-500 dark:text-slate-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
         </a>
       )}
 
       {/* Trạng thái vi phạm */}
       {post.isPendingReview && (
-        <div className="mt-3 p-3 bg-gemini-yellow/10 border border-gemini-yellow/20">
-          <p className="text-sm text-gemini-yellow font-medium">⚠️ Bài viết đang chờ kiểm duyệt</p>
+        <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <p className="text-sm text-slate-700 dark:text-slate-300 font-medium">Bài viết đang chờ kiểm duyệt</p>
+          </div>
           {isModerator && (
             <div className="mt-2 flex gap-2">
               <button
                 onClick={handleApprovePost}
-                className="bg-gemini-green px-3 py-1 text-sm text-white hover:bg-gemini-green/90 transition"
+                className="bg-gemini-blue px-3 py-1 text-sm text-white hover:bg-gemini-blue/90 transition rounded"
               >
-                ✓ Duyệt
+                <svg className="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Duyệt
               </button>
               <button
                 onClick={handleRejectPost}
-                className="border border-gemini-red px-3 py-1 text-sm text-gemini-red hover:bg-gemini-red/10 transition"
+                className="border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition rounded"
               >
-                ✕ Xóa
+                <svg className="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Xóa
               </button>
             </div>
           )}
@@ -764,7 +784,9 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
           <div className="flex items-center gap-1">
             {likes.length > 0 && (
               <div className="flex items-center gap-1">
-                <span className="text-red-500">❤️</span>
+                <svg className="w-4 h-4 fill-current text-slate-700 dark:text-slate-300" viewBox="0 0 24 24">
+                  <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                </svg>
                 <span className="text-slate-600 dark:text-slate-400">{likes.length}</span>
               </div>
             )}
@@ -783,35 +805,58 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
             onClick={() => toggleLike({ postId: post.id, userId })}
             className={`flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg transition ${
               liked 
-                ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' 
+                ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' 
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            <span className={liked ? 'text-red-500' : ''}>❤️</span>
+            <svg
+              className={`w-5 h-5 ${liked ? 'fill-current' : 'stroke-current'}`}
+              fill={liked ? 'currentColor' : 'none'}
+              strokeWidth={liked ? 0 : 2}
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
+              />
+            </svg>
             <span className="text-sm font-medium">Thích</span>
           </button>
           <button
             className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
             onClick={() => document.querySelector(`#comment-input-${post.id}`)?.focus()}
           >
-            <span>💬</span>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
             <span className="text-sm font-medium">Bình luận</span>
           </button>
           {post.solution ? (
             <button
               onClick={() => setShowSolutionModal(true)}
-              className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-gemini-blue dark:text-gemini-blue-light hover:bg-gemini-blue/10 dark:hover:bg-gemini-blue/20 transition"
+              className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
             >
-              <span>📋</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
               <span className="text-sm font-medium">Kết quả</span>
             </button>
           ) : (
             <button
               onClick={handleSolvePost}
               disabled={isSolvingPost}
-              className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-gemini-blue dark:text-gemini-blue-light hover:bg-gemini-blue/10 dark:hover:bg-gemini-blue/20 transition disabled:opacity-50"
+              className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-50"
             >
-              <span>{isSolvingPost ? '⏳' : '🤖'}</span>
+              {isSolvingPost ? (
+                <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              )}
               <span className="text-sm font-medium">{isSolvingPost ? 'Đang giải...' : 'Giải đáp'}</span>
             </button>
           )}
@@ -930,9 +975,12 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
                             </button>
                             <button
                               onClick={() => handleDeleteComment(index)}
-                              className="text-xs text-red-500 hover:underline"
+                              className="text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition flex items-center gap-1"
                             >
-                              Xóa
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              <span>Xóa</span>
                             </button>
                           </>
                         )}
@@ -974,7 +1022,12 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
                   <div>{renderTextWithLatex(comment.solution)}</div>
                 )}
                 {comment.isFlagged && (
-                  <div className="mt-1 text-sm font-semibold text-red-600">⚠️ Đã đánh dấu sai</div>
+                  <div className="mt-1 flex items-center gap-1 text-sm font-semibold text-slate-600 dark:text-slate-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>Đã đánh dấu sai</span>
+                  </div>
                 )}
                 {(isAdmin || isTeacher) && editingIndex !== index && (
                   <div className="mt-2 flex gap-2">
@@ -989,7 +1042,7 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
                     </button>
                     {!comment.isFlagged && (
                       <button
-                          className="border border-gemini-red px-2 py-1 text-xs text-gemini-red hover:bg-gemini-red/10 transition rounded"
+                          className="border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition rounded"
                         onClick={() => handleFlagSolution(index)}
                       >
                         Đánh dấu sai
@@ -1132,9 +1185,12 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
                                     </button>
                                     <button
                                       onClick={() => handleDeleteReply(index, replyIndex)}
-                                      className="text-xs text-red-500 hover:underline"
+                                      className="text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition flex items-center gap-1"
                                     >
-                                      Xóa
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                      <span>Xóa</span>
                                     </button>
                                   </>
                                 )}
@@ -1184,6 +1240,12 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
         }}
         onDeleteSolution={handleDeletePostSolution}
         isFlagged={post.isFlagged}
+      />
+      <ImageModal
+        isOpen={showImageModal}
+        onClose={() => setShowImageModal(false)}
+        imageUrl={post.imageUrl}
+        alt="Bài viết"
       />
     </article>
   )

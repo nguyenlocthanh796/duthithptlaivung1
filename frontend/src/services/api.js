@@ -5,13 +5,17 @@ const apiClient = axios.create({
 })
 
 export const chatWithAI = async (prompt, options = {}) => {
-  const { temperature = 0.4, max_tokens = 512, model } = options
-  const { data } = await apiClient.post('/ai/chat', {
+  const { temperature = 0.4, max_tokens = 512, model, imageUrl } = options
+  const payload = {
     prompt,
     temperature,
     max_tokens,
     model, // Support model selection
-  })
+  }
+  if (imageUrl) {
+    payload.imageUrl = imageUrl
+  }
+  const { data } = await apiClient.post('/ai/chat', payload)
   return data
 }
 

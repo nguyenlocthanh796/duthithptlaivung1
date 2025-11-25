@@ -45,6 +45,11 @@ Câu hỏi của người dùng:
 
 Hãy trả lời:"""
         
+        # If imageUrl is provided, include it in the prompt context
+        # Note: Gemini API supports image input, but for now we'll include URL in prompt
+        if request.imageUrl:
+            enhanced_prompt = f"{enhanced_prompt}\n\nNgười dùng đã đính kèm hình ảnh: {request.imageUrl}\nHãy phân tích hình ảnh và trả lời câu hỏi dựa trên nội dung hình ảnh."
+        
         answer = await generate_chat_with_gemini(
             prompt=enhanced_prompt,
             temperature=request.temperature,
@@ -53,6 +58,7 @@ Hãy trả lời:"""
         )
         return PromptResponse(answer=answer)
     except Exception as exc:  # pylint: disable=broad-except
+        logger.error(f"Error in chat endpoint: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
