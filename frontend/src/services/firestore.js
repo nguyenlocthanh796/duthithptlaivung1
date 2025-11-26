@@ -78,7 +78,21 @@ export const upsertUserProfile = async (user) => {
   }
 }
 
+// Get posts with pagination (for React Query)
+export const getPosts = async (limitCount = 10) => {
+  const q = query(
+    postsCollection, 
+    orderBy('createdAt', 'desc'),
+    limit(limitCount)
+  )
+  const snapshot = await getDocs(q)
+  return snapshot.docs
+    .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+    .filter((post) => !post.isHidden) // Filter client side
+}
+
 // Optimized for Firebase free tier - limit reads
+// Keep watchPosts for real-time updates (optional, can be used separately)
 export const watchPosts = (callback, limitCount = 20) => {
   // Use limit to minimize reads (Firebase free tier: 50K reads/day)
   const q = query(

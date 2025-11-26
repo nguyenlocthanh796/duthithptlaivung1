@@ -103,7 +103,7 @@ export function PostComposer({ user }) {
         tags: tags.length > 0 ? tags : undefined,
         author: {
           uid: user.uid,
-          name: user.displayName,
+          displayName: user.displayName || user.email,
           photoURL: user.photoURL,
         },
       })

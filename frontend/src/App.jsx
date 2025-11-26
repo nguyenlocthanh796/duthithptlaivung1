@@ -32,7 +32,17 @@ const LoadingSpinner = () => (
   </div>
 )
 
-const queryClient = new QueryClient()
+// Configure QueryClient with cache settings to reduce Firebase reads
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes - data is considered fresh for 5 minutes
+      gcTime: 1000 * 60 * 30, // 30 minutes - cache is kept for 30 minutes (formerly cacheTime)
+      refetchOnWindowFocus: false, // Don't refetch when window regains focus
+      retry: 1, // Retry failed requests once
+    },
+  },
+})
 
 function App() {
   // Initialize Remote Config on app start

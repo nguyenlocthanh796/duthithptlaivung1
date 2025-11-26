@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { 
   Image as ImageIcon, 
   Send, 
   Camera, 
   Calculator
 } from 'lucide-react'
-import { watchPosts, getUserRoles, getMorePosts, searchPosts } from '../services/firestore'
+import { getPosts, watchPosts, getUserRoles, getMorePosts, searchPosts } from '../services/firestore'
 import { createPost } from '../services/firestore'
 import { uploadImage, uploadDocument } from '../services/storageService'
 import { lazy, Suspense } from 'react'
@@ -26,6 +27,7 @@ dayjs.extend(relativeTime)
 export function FeedPage() {
   const { user } = useAuth()
   const { success, error: showError } = useToast()
+  const queryClient = useQueryClient()
   // rightSidebarOpen is managed by Navbar, not needed here
   const [searchParams] = useSearchParams()
   const [posts, setPosts] = useState([])
@@ -71,7 +73,31 @@ export function FeedPage() {
     }
   }, [searchParams, handleSearch])
 
-  // Load posts
+  // Load posts using React Query for caching
+  const { 
+    data: queryPosts, 
+    isLoading: isLoadingPosts, 
+    isError: isErrorPosts,
+    error: postsError 
+  } = useQuery({
+    queryKey: ['posts'],
+    queryFn: () => getPosts(10), // Limit to 10 posts initially
+    enabled: !isSearching, // Only fetch when not searching
+    staleTime: 1000 * 60 * 5, // 5 minutes (uses default from QueryClient)
+  })
+
+  // Update posts state when query data changes
+  useEffect(() => {
+    if (queryPosts) {
+      setPosts(queryPosts)
+      if (queryPosts.length > 0) {
+        lastPostRef.current = queryPosts[queryPosts.length - 1]
+      }
+      setHasMore(queryPosts.length >= 10) // Assume more if we got 10 posts
+    }
+  }, [queryPosts])
+
+  // Handle search (keep existing search logic)
   useEffect(() => {
     if (isSearching && searchFilters) {
       setLoading(true)
@@ -83,17 +109,22 @@ export function FeedPage() {
         logger.error('Search error:', error)
         setLoading(false)
       })
-    } else {
-      const unsub = watchPosts((newPosts) => {
-        setPosts(newPosts)
-        if (newPosts.length > 0) {
-          lastPostRef.current = newPosts[newPosts.length - 1]
-        }
-        setHasMore(true)
-      })
-      return () => unsub()
     }
   }, [isSearching, searchFilters])
+
+  // Update loading state based on query
+  useEffect(() => {
+    if (!isSearching) {
+      setLoading(isLoadingPosts)
+    }
+  }, [isLoadingPosts, isSearching])
+
+  // Handle error state
+  useEffect(() => {
+    if (isErrorPosts && postsError) {
+      logger.error('Error loading posts:', postsError)
+    }
+  }, [isErrorPosts, postsError])
 
   // Handle image selection
   const handleImageSelect = (e, isCamera = false) => {
@@ -169,6 +200,9 @@ export function FeedPage() {
           photoURL: user.photoURL,
         },
       })
+
+      // Invalidate posts cache to refetch with new post
+      queryClient.invalidateQueries({ queryKey: ['posts'] })
 
       success('Đăng bài thành công!')
       setPostText('')
@@ -327,6 +361,19 @@ export function FeedPage() {
             </button>
           ))}
         </div>
+
+        {/* Error State */}
+        {isErrorPosts && !isSearching && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+            <p className="text-red-600 text-sm">Không thể tải bài viết. Vui lòng thử lại sau.</p>
+            <button
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['posts'] })}
+              className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
 
         {/* Feed Posts */}
         <Suspense fallback={<div className="text-center py-8 text-gray-500">Đang tải...</div>}>
