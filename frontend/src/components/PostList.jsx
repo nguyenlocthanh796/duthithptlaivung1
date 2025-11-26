@@ -1,7 +1,7 @@
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { useState, useEffect, useRef, memo, useMemo, useCallback, lazy, Suspense } from 'react'
-import { Heart, MessageSquare, PenTool, MoreHorizontal, CheckCircle } from 'lucide-react'
+import { Heart, MessageSquare, PenTool, MoreHorizontal, CheckCircle, HelpCircle, CheckCircle2 } from 'lucide-react'
 import { renderTextWithLatex } from '../utils/latexRenderer'
 import logger from '../utils/logger'
 
@@ -858,8 +858,8 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
               onClick={() => setShowSolutionModal(true)}
               className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
             >
-              <PenTool size={18} />
-              <span className="font-medium text-sm">Lời Giải</span>
+              <CheckCircle2 size={18} />
+              <span className="font-medium text-sm">Kết quả</span>
             </button>
           ) : (
             <button
@@ -867,8 +867,8 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
               disabled={isSolvingPost}
               className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
             >
-              <PenTool size={18} />
-              <span className="font-medium text-sm">{isSolvingPost ? 'Đang giải...' : 'Giải đáp'}</span>
+              <HelpCircle size={18} />
+              <span className="font-medium text-sm">{isSolvingPost ? 'Đang giải...' : 'Trợ Giúp'}</span>
             </button>
           )}
         </div>

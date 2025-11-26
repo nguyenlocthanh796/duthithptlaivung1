@@ -68,12 +68,8 @@ export const upsertUserProfile = async (user) => {
         errorCode === 'deadline-exceeded' ||
         errorName === 'NetworkError' ||
         errorName === 'AbortError') {
-      console.warn('Firestore request blocked or failed (likely by ad blocker or network issue). User profile update skipped.', {
-        message: errorMessage,
-        code: errorCode,
-        name: errorName
-      })
-      // Don't throw - allow app to continue functioning
+      // Silently handle - don't log to avoid cluttering console
+      // This is typically caused by ad blockers and doesn't affect app functionality
       return
     }
     // Re-throw other errors (only critical ones)

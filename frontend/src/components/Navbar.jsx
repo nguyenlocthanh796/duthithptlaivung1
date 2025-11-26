@@ -88,9 +88,9 @@ export function Navbar() {
 
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6 z-50 shrink-0 shadow-sm">
-      {/* Left: Logo - Mobile/Tablet: toggle menu (trừ trang /chat), Desktop: link về trang chủ */}
+      {/* Left: Logo - Mobile/Tablet: toggle menu, Desktop: link về trang chủ */}
       <div className="flex items-center gap-3 md:gap-8">
-        {isMobile && location.pathname !== '/chat' ? (
+        {isMobile ? (
           <button
             onClick={(e) => {
               e.preventDefault()

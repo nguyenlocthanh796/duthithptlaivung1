@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { getUserRoles } from '../services/firestore'
 import { NavigationSidebar } from './NavigationSidebar'
 import { useSidebar } from '../context/SidebarContext'
-import { BookOpen, MessageSquare, Calculator, Trophy, PanelRightClose } from 'lucide-react'
+import { BookOpen, Calculator, Trophy } from 'lucide-react'
 
 export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
   const { user } = useAuth()
@@ -24,7 +24,7 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
     setContextIsMobile(isMobile)
   }, [isMobile, setContextIsMobile])
 
-  // Ngăn scroll trên cột 1 và cột 3 - Chỉ khóa scroll, không khóa click/touch
+  // Ngăn scroll trên cột 1 và cột 3 - Khóa scroll hoàn toàn
   useEffect(() => {
     const preventScroll = (e) => {
       e.preventDefault()
@@ -38,15 +38,9 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
       return false
     }
 
-    // Chỉ prevent touchmove (scroll), không prevent touchstart/touchend (click)
     const preventTouchMove = (e) => {
-      // Chỉ prevent nếu đang scroll, không prevent nếu đang click
-      const target = e.target
-      const isClickable = target.closest('a, button, [role="button"], input, select, textarea')
-      if (!isClickable) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
+      e.preventDefault()
+      e.stopPropagation()
       return false
     }
 
@@ -58,7 +52,6 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
       const rightSidebarContainer = rightSidebarContainerRef.current
 
       if (leftSidebarContainer) {
-        // Lock scroll trên container sidebar trái
         leftSidebarContainer.addEventListener('wheel', preventWheel, { passive: false })
         leftSidebarContainer.addEventListener('touchmove', preventTouchMove, { passive: false })
         leftSidebarContainer.addEventListener('scroll', preventScroll, { passive: false })
@@ -69,19 +62,16 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
       }
 
       if (leftSidebar) {
-        // Lock scroll nhưng cho phép click
         leftSidebar.addEventListener('wheel', preventWheel, { passive: false })
         leftSidebar.addEventListener('touchmove', preventTouchMove, { passive: false })
         leftSidebar.addEventListener('scroll', preventScroll, { passive: false })
         
-        // Đảm bảo không scroll được nhưng vẫn click được
         leftSidebar.style.overflow = 'hidden'
         leftSidebar.style.overscrollBehavior = 'none'
-        leftSidebar.style.touchAction = 'manipulation' // Cho phép click, không cho scroll
+        leftSidebar.style.touchAction = 'none'
       }
 
       if (rightSidebarContainer) {
-        // Lock scroll trên container sidebar phải
         rightSidebarContainer.addEventListener('wheel', preventWheel, { passive: false })
         rightSidebarContainer.addEventListener('touchmove', preventTouchMove, { passive: false })
         rightSidebarContainer.addEventListener('scroll', preventScroll, { passive: false })
@@ -92,18 +82,14 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
       }
 
       if (rightSidebar) {
-        // Lock scroll nhưng cho phép click
         rightSidebar.addEventListener('wheel', preventWheel, { passive: false })
         rightSidebar.addEventListener('touchmove', preventTouchMove, { passive: false })
         rightSidebar.addEventListener('scroll', preventScroll, { passive: false })
         
-        // Đảm bảo không scroll được nhưng vẫn click được
         rightSidebar.style.overflow = 'hidden'
         rightSidebar.style.overscrollBehavior = 'none'
-        rightSidebar.style.touchAction = 'manipulation' // Cho phép click, không cho scroll
+        rightSidebar.style.touchAction = 'none'
       }
-
-      // Main content không khóa scroll - để hoạt động bình thường
     }, 0)
 
     return () => {
@@ -133,9 +119,8 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
         rightSidebar.removeEventListener('touchmove', preventTouchMove)
         rightSidebar.removeEventListener('scroll', preventScroll)
       }
-      // Main content không cần cleanup
     }
-  }, [sidebarOpen, rightSidebarOpen]) // Chạy lại khi sidebar mở/đóng
+  }, [sidebarOpen, rightSidebarOpen])
   
   // Trên desktop, sidebar luôn mở và không thể đóng
   useEffect(() => {
@@ -166,7 +151,6 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
   const navLinks = useMemo(() => {
     const mainLinks = [
       { to: '/', label: 'Bảng tin', icon: <BookOpen size={20} />, active: location.pathname === '/' },
-      { to: '/chat', label: 'Chat AI', icon: <MessageSquare size={20} />, active: location.pathname === '/chat' },
       { to: '/exam', label: 'Phòng thi', icon: <Calculator size={20} />, active: location.pathname === '/exam' },
       { to: '/dashboard', label: 'Thành tích', icon: <Trophy size={20} />, active: location.pathname === '/dashboard' },
     ]
@@ -258,13 +242,10 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
     </div>
   )
 
-  // Kiểm tra xem có phải trang /chat không
-  const isChatPage = location.pathname === '/chat'
-  
   return (
     <div className="flex h-screen overflow-hidden relative w-full">
-      {/* Mobile/Tablet Overlay - Chỉ hiển thị khi không phải trang /chat */}
-      {!isChatPage && sidebarOpen && (isMobile || (!isDesktop && !isXlScreen)) && (
+      {/* Mobile/Tablet Overlay - Chỉ hiển thị khi không phải desktop */}
+      {sidebarOpen && !isDesktop && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 z-40"
           onClick={() => setSidebarOpen(false)}
@@ -273,32 +254,31 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
       )}
 
       {/* Sidebar - Cột 1 (Điều hướng) - Tối ưu hóa */}
-      {/* Ẩn cột 1 trên web khi ở trang /chat */}
-      {!(isChatPage && !isMobile) && (
-        <aside
-          ref={leftSidebarContainerRef}
-          className={`${
-            // Mobile/Tablet: Luôn là overlay (fixed), chỉ translate
-            // Desktop: Relative, có thể ẩn bằng width
-            isMobile || (!isDesktop && !isXlScreen)
-              ? `fixed top-0 left-0 z-50 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
-              : `relative ${sidebarOpen ? 'translate-x-0' : 'translate-x-0'}`
-          } ${
-            sidebarOpen 
-              ? isMobile || (!isDesktop && !isXlScreen) ? 'w-64' : 'w-56' // Mobile/Tablet: 256px, Desktop: 224px
-              : isMobile || (!isDesktop && !isXlScreen) ? 'w-64' : 'w-0 lg:w-56' // Mobile/Tablet: giữ width khi đóng (để có thể slide), Desktop: co về 0
-          } flex flex-col transition-all duration-300 border-r border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-950 flex-shrink-0 h-screen overflow-hidden`}
+      <aside
+        ref={leftSidebarContainerRef}
+        className={`${
+          // Desktop (>= 1024px): Relative, luôn hiển thị
+          // Mobile/Tablet (< 1024px): Fixed overlay, có thể đóng/mở
+          isDesktop
+            ? 'relative translate-x-0' // Desktop: Luôn hiển thị
+            : `fixed top-0 left-0 z-50 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}` // Mobile/Tablet: Overlay
+        } ${
+          // Desktop: Luôn width 224px (w-56)
+          // Mobile/Tablet: Width 256px (w-64) khi mở, giữ width khi đóng để slide
+          isDesktop
+            ? 'w-56' // Desktop: 224px, luôn hiển thị
+            : 'w-64' // Mobile/Tablet: 256px
+        } flex flex-col transition-all duration-300 border-r border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-950 flex-shrink-0 h-screen overflow-hidden`}
         style={{
+          paddingTop: '4px', // Khoảng cách nhỏ với navbar
           overflow: 'hidden',
           overscrollBehavior: 'none',
           touchAction: 'none',
         }}
       >
-        {/* Navbar Space - Để tránh che navbar */}
-        <div className="h-16 flex-shrink-0"></div>
-        <div 
+        <div
           ref={leftSidebarRef}
-          className={`flex-1 min-h-0 overflow-hidden`}
+          className="flex-1 min-h-0 overflow-hidden"
           style={{
             overflow: 'hidden',
             overscrollBehavior: 'none',
@@ -333,32 +313,12 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
                 </div>
               )}
 
-              {/* Mobile Header inside Sidebar */}
-              {isMobile && (
-                <div className="flex justify-between items-center p-4 border-b border-gray-100 flex-shrink-0">
-                  <span className="font-bold text-gray-700">Menu</span>
-                  <button onClick={() => setSidebarOpen(false)} className="p-1 text-gray-500">
-                    <PanelRightClose size={20}/>
-                  </button>
-                </div>
-              )}
-
               {/* Navigation Content - Design mới - Hiển thị đầy đủ chân trang */}
               <div 
                 className={`flex flex-col ${isMobile ? 'p-2 pb-6' : 'p-4 pb-6'}`}
-                style={{
-                  overflow: 'hidden',
-                  overscrollBehavior: 'none',
-                  touchAction: 'none',
-                }}
               >
                 <nav 
                   className="space-y-1"
-                  style={{
-                    overflow: 'hidden',
-                    overscrollBehavior: 'none',
-                    touchAction: 'none',
-                  }}
                 >
                   {navLinks.mainLinks.map((item, idx) => (
                     <Link
@@ -383,7 +343,6 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
           )}
         </div>
       </aside>
-      )}
 
       {/* Main Content - Cột 2 - Thu nhỏ và căn giữa - Hoạt động bình thường */}
       <main 
@@ -391,25 +350,14 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
         style={{ 
           paddingTop: '0px',
           height: '100%',
-          // Mobile/Tablet: Không có marginLeft (sidebar là overlay, không làm biến dạng)
-          // Desktop: Có marginLeft khi sidebar mở
-          // Trang /chat: Không có marginLeft
-          marginLeft: isChatPage && !isMobile 
-            ? '0' 
-            : (isMobile || (!isDesktop && !isXlScreen))
-              ? '0' // Mobile/Tablet: Không margin (sidebar là overlay)
-              : (isDesktop && sidebarOpen ? '224px' : '0'), // Desktop: Có margin khi sidebar mở
-          marginRight: isChatPage && !isMobile 
-            ? '0' 
-            : (isXlScreen && rightSidebarOpen ? '288px' : '0'),
-          transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
+          // Desktop: Không cần marginLeft vì sidebar là relative, flex tự xử lý
+          // Mobile/Tablet: Không có marginLeft (sidebar là overlay)
+          // Right sidebar: Cần marginRight khi mở
+          marginRight: isXlScreen && rightSidebarOpen ? '288px' : '0',
+          transition: 'margin-right 0.3s ease',
         }}
       >
-        <div className={`w-full h-full box-border flex justify-center ${
-          location.pathname === '/chat' 
-            ? 'px-0 py-0 overflow-hidden' 
-            : 'px-2 sm:px-3 md:px-4 py-3 md:py-4 overflow-y-auto overflow-x-hidden scrollbar-hide'
-        }`}>
+        <div className="w-full h-full box-border flex justify-center px-2 sm:px-3 md:px-4 py-3 md:py-4 overflow-y-auto overflow-x-hidden scrollbar-hide">
           <style>{`
             .scrollbar-hide::-webkit-scrollbar {
               display: none;
@@ -419,17 +367,14 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
               scrollbar-width: none;
             }
           `}</style>
-          <div className={`w-full h-full ${
-            location.pathname === '/chat' ? 'max-w-full' : 'max-w-2xl'
-          }`}>
+          <div className="w-full h-full max-w-2xl">
             {children}
           </div>
         </div>
       </main>
 
       {/* Nút mở Right Sidebar - Tối giản, tinh tế */}
-      {/* Ẩn nút mở right sidebar khi ở trang /chat */}
-      {isXlScreen && !rightSidebarOpen && location.pathname !== '/chat' && (
+      {isXlScreen && !rightSidebarOpen && (
         <button
           onClick={() => setRightSidebarOpen(true)}
           className="fixed right-2 top-20 z-30 p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
@@ -442,22 +387,19 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
       )}
 
       {/* Right Sidebar - Cột 3 */}
-      {/* Ẩn cột 3 trên web khi ở trang /chat */}
-      {!(location.pathname === '/chat' && !isMobile) && (
-        <aside 
+      <aside 
           ref={rightSidebarContainerRef}
           className={`hidden xl:flex flex-col w-72 border-l border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-950 flex-shrink-0 transition-transform duration-300 fixed top-0 right-0 z-30 h-screen overflow-hidden ${
             rightSidebarOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
         style={{
+          paddingTop: '4px', // Khoảng cách nhỏ với navbar
           overflow: 'hidden',
           overscrollBehavior: 'none',
           touchAction: 'none',
         }}
       >
-        {/* Navbar Space - Để tránh che navbar */}
-        <div className="h-16 flex-shrink-0"></div>
-        <div 
+        <div
           ref={rightSidebarRef}
           className="flex-1 min-h-0 overflow-hidden"
           style={{
@@ -474,7 +416,6 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
           </div>
         </div>
       </aside>
-      )}
     </div>
   )
 }
