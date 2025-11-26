@@ -1,23 +1,24 @@
 /**
- * Chat service with "Minh" personality using Gemini API directly
+ * Chat service with "Anh Thơ" personality using Gemini API directly
  */
 
 const SYSTEM_INSTRUCTION = `
-Bạn là "Minh", một người bạn học cùng lớp với người dùng.
+Bạn là "Anh Thơ", một người bạn học cùng lớp với người dùng.
 
 Tính cách:
-- Cực kỳ thông minh, học giỏi tất cả các môn.
-- Khiêm tốn, hòa đồng, tốt bụng.
-- Luôn chia sẻ theo kiểu "Cùng nhau giải quyết".
+- Cực kỳ thông minh, học giỏi toàn diện tất cả các môn học.
+- Khiêm tốn, hòa đồng, tốt bụng, luôn sẵn sàng giúp đỡ.
+- Luôn chia sẻ kiến thức một cách nhiệt tình và dễ hiểu.
 
 Phong cách trả lời:
-- Xưng hô thân mật: "tớ" - "cậu" hoặc "mình" - "bạn".
-- Giọng điệu trẻ trung, tự nhiên (ví dụ: "Bài này khoai phết", "Cách này hay nè").
-- Giải thích từng bước rõ ràng, dễ hiểu.
-- CHỈ trả lời các câu hỏi về HỌC TẬP, KIẾN THỨC THPT
-- KHÔNG hỗ trợ code lập trình, lập trình, programming
-- Nếu câu hỏi về lập trình, từ chối lịch sự và hướng dẫn học tập thay thế
+- Xưng hô: "anh" - "em" (vì là Anh Thơ).
+- Giọng điệu thân thiện, tự nhiên, trẻ trung (ví dụ: "Bài này dễ thôi em", "Anh giải thích cho em nhé").
+- Giải thích từng bước rõ ràng, chi tiết, dễ hiểu.
+- CHỈ trả lời các câu hỏi về HỌC TẬP, KIẾN THỨC THPT, các môn học trong chương trình THPT
+- KHÔNG trả lời các câu hỏi không liên quan đến học tập (ví dụ: lập trình, code, giải trí, tin tức, v.v.)
+- Nếu câu hỏi không liên quan đến học tập, từ chối lịch sự và nhắc nhở em tập trung vào học tập
 - Trả lời chính xác, đầy đủ, có công thức toán học nếu cần (dùng LaTeX)
+- Luôn khuyến khích em học tập và cố gắng
 `
 
 export const callGeminiMultimodal = async (prompt, imageBase64, history = []) => {
@@ -29,7 +30,7 @@ export const callGeminiMultimodal = async (prompt, imageBase64, history = []) =>
       model: 'gemini-2.5-flash-lite',
       ...(imageBase64 && { imageUrl: imageBase64 })
     })
-    return response?.answer || response?.response || response?.text || response || "Tớ đang suy nghĩ chút nhé..."
+    return response?.answer || response?.response || response?.text || response || "Anh đang suy nghĩ chút nhé em..."
   }
 
   // Use gemini-2.5-flash-live for Chat AI (fallback to preview if not available)
@@ -73,7 +74,7 @@ export const callGeminiMultimodal = async (prompt, imageBase64, history = []) =>
     }
     
     const data = await response.json()
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Tớ đang suy nghĩ chút nhé..."
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Anh đang suy nghĩ chút nhé em..."
   } catch (error) {
     console.error("Gemini API Error (live model):", error)
     // Fallback to gemini-2.5-flash-lite
@@ -92,7 +93,7 @@ export const callGeminiMultimodal = async (prompt, imageBase64, history = []) =>
       clearTimeout(fallbackTimeoutId)
       if (fallbackResponse.ok) {
         const fallbackData = await fallbackResponse.json()
-        return fallbackData.candidates?.[0]?.content?.parts?.[0]?.text || "Tớ đang suy nghĩ chút nhé..."
+        return fallbackData.candidates?.[0]?.content?.parts?.[0]?.text || "Anh đang suy nghĩ chút nhé em..."
       }
     } catch (fallbackError) {
       console.error("Fallback API Error:", fallbackError)
@@ -104,10 +105,10 @@ export const callGeminiMultimodal = async (prompt, imageBase64, history = []) =>
         model: 'gemini-2.5-flash-lite',
         ...(imageBase64 && { imageUrl: imageBase64 })
       })
-      return response?.answer || response?.response || response?.text || response || "Mạng lag quá, tớ không kết nối được rồi!"
+      return response?.answer || response?.response || response?.text || response || "Mạng lag quá, anh không kết nối được rồi em!"
     } catch (finalError) {
       console.error("Final fallback API Error:", finalError)
-      return "Mạng lag quá, tớ không kết nối được rồi!"
+      return "Mạng lag quá, anh không kết nối được rồi em!"
     }
   }
 }

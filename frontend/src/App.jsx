@@ -11,6 +11,7 @@ import logger from './utils/logger'
 
 // Lazy load FeedPage to reduce initial bundle size
 const FeedPage = lazy(() => import('./pages/FeedPage').then(module => ({ default: module.FeedPage })))
+const ChatPage = lazy(() => import('./pages/ChatPage').then(module => ({ default: module.default })))
 
 // Lazy load heavy components to reduce initial bundle size
 const ExamRoomPage = lazy(() => import('./pages/ExamRoomPage').then(module => ({ default: module.ExamRoomPage })))
@@ -111,6 +112,14 @@ function App() {
                   element={
                     <Suspense fallback={<LoadingSpinner />}>
                       <LaTeXGuidePage />
+                    </Suspense>
+                  } 
+                />
+                <Route 
+                  path="/chat" 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <ChatPage />
                     </Suspense>
                   } 
                 />

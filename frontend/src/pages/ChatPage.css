@@ -1,0 +1,42 @@
+/* ChatPage.css */
+
+/* Animation cho sóng âm thanh */
+@keyframes bounce-wave {
+  0%, 100% { height: 3px; }
+  50% { height: 12px; }
+}
+
+.animate-bounce-wave {
+  animation: bounce-wave 0.5s infinite ease-in-out;
+}
+
+/* Ẩn thanh cuộn nhưng vẫn cho phép cuộn */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Icon Material Design */
+.material-btn-icon {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+  color: #444746;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.material-btn-icon:hover {
+  background-color: rgba(68, 71, 70, 0.08);
+}
+

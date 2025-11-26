@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { getUserRoles } from '../services/firestore'
 import { NavigationSidebar } from './NavigationSidebar'
 import { useSidebar } from '../context/SidebarContext'
-import { BookOpen, Calculator, Trophy } from 'lucide-react'
+import { BookOpen, Calculator, Trophy, MessageSquare } from 'lucide-react'
 
 export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
   const { user } = useAuth()
@@ -18,6 +18,9 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
   const rightSidebarRef = useRef(null)
   const leftSidebarContainerRef = useRef(null)
   const rightSidebarContainerRef = useRef(null)
+  
+  // Kiểm tra xem có đang ở trang Chat không
+  const isChatPage = location.pathname === '/chat'
   
   // Sync mobile state với context
   useEffect(() => {
@@ -152,6 +155,7 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
     const mainLinks = [
       { to: '/', label: 'Bảng tin', icon: <BookOpen size={20} />, active: location.pathname === '/' },
       { to: '/exam', label: 'Phòng thi', icon: <Calculator size={20} />, active: location.pathname === '/exam' },
+      { to: '/chat', label: 'Chat AI', icon: <MessageSquare size={20} />, active: location.pathname === '/chat' },
       { to: '/dashboard', label: 'Thành tích', icon: <Trophy size={20} />, active: location.pathname === '/dashboard' },
     ]
     
@@ -254,10 +258,12 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
       )}
 
       {/* Sidebar - Cột 1 (Điều hướng) - Tối ưu hóa */}
+      {/* Ẩn trên desktop khi ở trang /chat, giữ nguyên trên mobile */}
+      {!(isChatPage && isDesktop) && (
       <aside
         ref={leftSidebarContainerRef}
         className={`${
-          // Desktop (>= 1024px): Relative, luôn hiển thị
+          // Desktop (>= 1024px): Relative, luôn hiển thị (trừ khi ở /chat)
           // Mobile/Tablet (< 1024px): Fixed overlay, có thể đóng/mở
           isDesktop
             ? 'relative translate-x-0' // Desktop: Luôn hiển thị
@@ -343,6 +349,7 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
           )}
         </div>
       </aside>
+      )}
 
       {/* Main Content - Cột 2 - Thu nhỏ và căn giữa - Hoạt động bình thường */}
       <main 
@@ -373,18 +380,6 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
         </div>
       </main>
 
-      {/* Nút mở Right Sidebar - Tối giản, tinh tế */}
-      {isXlScreen && !rightSidebarOpen && (
-        <button
-          onClick={() => setRightSidebarOpen(true)}
-          className="fixed right-2 top-20 z-30 p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
-          title="Mở thông tin"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-      )}
 
       {/* Right Sidebar - Cột 3 */}
       <aside 
