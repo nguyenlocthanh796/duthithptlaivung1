@@ -3,7 +3,7 @@
  * Upload files directly to Firebase Storage from frontend
  */
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
-import { storage } from '../firebase'
+import { getStorageInstance } from '../firebase'
 import { compressImage, isImageFile, getCompressionOptions } from '../utils/imageCompression'
 
 /**
@@ -21,6 +21,7 @@ export async function uploadFile(file, folder = 'uploads') {
     const fileName = `${timestamp}-${randomId}.${fileExtension}`
     
     // Create storage reference
+    const storage = getStorageInstance()
     const storageRef = ref(storage, `${folder}/${fileName}`)
     
     // Upload file
@@ -81,6 +82,7 @@ export async function uploadDocument(file) {
  */
 export async function deleteFile(path) {
   try {
+    const storage = getStorageInstance()
     const storageRef = ref(storage, path)
     await deleteObject(storageRef)
   } catch (error) {

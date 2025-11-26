@@ -5,12 +5,19 @@ import os
 import uvicorn
 
 if __name__ == "__main__":
+    # On Windows, multiprocessing workers can cause issues, default to development mode
+    # On Linux/Cloud Run, use production mode with workers
+    import platform
+    is_windows = platform.system() == "Windows"
+    
     # Production mode: no reload, 2 workers for e2-micro (1GB RAM)
-    is_dev = os.getenv("ENV", "production") == "development"
+    # But on Windows, default to development mode (workers don't work well)
+    env_mode = os.getenv("ENV", "development" if is_windows else "production")
+    is_dev = env_mode == "development"
     
     # Uvicorn doesn't support workers with reload=True
-    # Use workers only in production mode
-    if is_dev:
+    # Use workers only in production mode and on non-Windows systems
+    if is_dev or is_windows:
         # Development mode: single worker with reload
         uvicorn.run(
             "app.main:app",

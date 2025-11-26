@@ -4,7 +4,7 @@
  */
 
 import { httpsCallable } from 'firebase/functions'
-import { functions } from '../firebase'
+import { getFunctionsInstance } from '../firebase'
 import axios from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
@@ -17,6 +17,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 export async function getAIExplanation(question, studentAnswer, correctAnswer, subject = 'Toán') {
   try {
     // Try Cloud Function first (if available)
+    const functions = getFunctionsInstance()
     if (functions) {
       try {
         const explainWrongAnswer = httpsCallable(functions, 'getAIExplanation')

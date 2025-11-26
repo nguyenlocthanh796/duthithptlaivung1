@@ -2,7 +2,79 @@ import axios from 'axios'
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  timeout: 30000, // 30 seconds timeout
+  headers: {
+    'Content-Type': 'application/json',
+  },
 })
+
+// Request caching for GET requests (5 minutes) - optimized for connection speed
+const cache = new Map()
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+const MAX_CACHE_SIZE = 50 // Limit cache size
+
+// Clean old cache entries periodically
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, value] of cache.entries()) {
+    if (now - value.timestamp > CACHE_DURATION) {
+      cache.delete(key)
+    }
+  }
+  // If cache is still too large, remove oldest entries
+  if (cache.size > MAX_CACHE_SIZE) {
+    const entries = Array.from(cache.entries())
+    entries.sort((a, b) => a[1].timestamp - b[1].timestamp)
+    const toDelete = entries.slice(0, cache.size - MAX_CACHE_SIZE)
+    toDelete.forEach(([key]) => cache.delete(key))
+  }
+}, 60000) // Clean every minute
+
+// Request interceptor for caching
+apiClient.interceptors.request.use((config) => {
+  // Only cache GET requests
+  if (config.method === 'get' && !config.noCache) {
+    const cacheKey = `${config.url}${JSON.stringify(config.params || {})}`
+    const cached = cache.get(cacheKey)
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      // Return cached response immediately
+      return Promise.reject({
+        __cached: true,
+        data: cached.data,
+        config,
+      })
+    }
+  }
+  return config
+})
+
+// Response interceptor for caching
+apiClient.interceptors.response.use(
+  (response) => {
+    const config = response.config
+    if (config.method === 'get' && !config.noCache) {
+      const cacheKey = `${config.url}${JSON.stringify(config.params || {})}`
+      cache.set(cacheKey, {
+        data: response.data,
+        timestamp: Date.now(),
+      })
+    }
+    return response
+  },
+  (error) => {
+    // Handle cached responses
+    if (error.__cached) {
+      return Promise.resolve({ 
+        data: error.data,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: error.config,
+      })
+    }
+    return Promise.reject(error)
+  }
+)
 
 export const chatWithAI = async (prompt, options = {}) => {
   const { temperature = 0.4, max_tokens = 512, model, imageUrl } = options
@@ -144,3 +216,4 @@ export const extractQuestionsFromFile = async (file) => {
   })
   return data
 }
+

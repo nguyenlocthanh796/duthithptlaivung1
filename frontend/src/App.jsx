@@ -7,8 +7,10 @@ import { ThemeProvider } from './context/ThemeContext'
 import { ProtectedLayout } from './components/ProtectedLayout'
 import { initializeRemoteConfig, isMaintenanceMode } from './services/remoteConfigService'
 import { LoginPage } from './pages/LoginPage'
-import { FeedPage } from './pages/FeedPage'
 import logger from './utils/logger'
+
+// Lazy load FeedPage to reduce initial bundle size
+const FeedPage = lazy(() => import('./pages/FeedPage').then(module => ({ default: module.FeedPage })))
 
 // Lazy load heavy components to reduce initial bundle size
 const ChatPage = lazy(() => import('./pages/ChatPage').then(module => ({ default: module.ChatPage })))
@@ -19,7 +21,7 @@ const AdminPage = lazy(() => import('./pages/AdminPage').then(module => ({ defau
 const LiveQuizPage = lazy(() => import('./pages/LiveQuizPage').then(module => ({ default: module.LiveQuizPage })))
 const LiveQuizHostPage = lazy(() => import('./pages/LiveQuizHostPage').then(module => ({ default: module.LiveQuizHostPage })))
 const DocumentManagerPage = lazy(() => import('./pages/DocumentManagerPage').then(module => ({ default: module.DocumentManagerPage })))
-const MathVisualizerPage = lazy(() => import('./pages/MathVisualizerPage').then(module => ({ default: module.MathVisualizerPage })))
+const LaTeXGuidePage = lazy(() => import('./pages/LaTeXGuidePage').then(module => ({ default: module.LaTeXGuidePage })))
 const TeacherRoute = lazy(() => import('./components/TeacherRoute').then(module => ({ default: module.TeacherRoute })))
 const AdminRoute = lazy(() => import('./components/AdminRoute').then(module => ({ default: module.AdminRoute })))
 const ToastContainer = lazy(() => import('./components/Toast').then(module => ({ default: module.ToastContainer })))
@@ -55,7 +57,14 @@ function App() {
               {/* Firebase Auth iframe route - suppress warning */}
               <Route path="/__/auth/iframe" element={null} />
               <Route element={<ProtectedLayout />}>
-                <Route index element={<FeedPage />} />
+                <Route 
+                  index 
+                  element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <FeedPage />
+                    </Suspense>
+                  } 
+                />
                 <Route 
                   path="/chat" 
                   element={
@@ -97,10 +106,10 @@ function App() {
                   } 
                 />
                 <Route 
-                  path="/math-visualizer" 
+                  path="/latex-guide" 
                   element={
                     <Suspense fallback={<LoadingSpinner />}>
-                      <MathVisualizerPage />
+                      <LaTeXGuidePage />
                     </Suspense>
                   } 
                 />

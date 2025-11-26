@@ -1,10 +1,16 @@
 import logging
+import json
+import tempfile
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, File, UploadFile
 
 from ..config import get_settings
 from ..schemas import PromptRequest, PromptResponse
 from ..services.gemini_client import get_gemini_client
+from ..services.r2_client import get_r2_client
+from ..services.gcs_client import get_gcs_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -64,37 +70,80 @@ Hãy trả lời:"""
 
 def is_educational_content(text: str, has_image: bool = False) -> bool:
     """Kiểm tra xem nội dung có liên quan đến học tập không"""
-    if not text or len(text.strip()) < 10:
+    # Nếu có hình ảnh, chấp nhận ngay (hình ảnh có thể chứa đề bài)
+    if has_image:
+        return True
+    
+    if not text or len(text.strip()) < 5:  # Giảm ngưỡng từ 10 xuống 5
         return False
     
-    # Từ khóa liên quan đến học tập
+    text_lower = text.lower()
+    text_original = text  # Giữ nguyên để kiểm tra ký tự đặc biệt
+    
+    # Từ khóa liên quan đến học tập - mở rộng danh sách
     educational_keywords = [
-        'giải', 'tính', 'tìm', 'chứng minh', 'chứng minh rằng',
-        'phương trình', 'bất phương trình', 'hệ phương trình',
-        'hàm số', 'đạo hàm', 'tích phân', 'nguyên hàm',
-        'lượng giác', 'sin', 'cos', 'tan', 'cot',
-        'logarit', 'mũ', 'căn', 'sqrt',
-        'hình học', 'tọa độ', 'vectơ', 'đường thẳng', 'mặt phẳng',
-        'xác suất', 'tổ hợp', 'chỉnh hợp',
-        'đề bài', 'bài tập', 'câu hỏi', 'đề thi',
-        'toán', 'lý', 'hóa', 'sinh', 'văn', 'anh', 'sử', 'địa'
+        # Động từ học tập
+        'giải', 'tính', 'tìm', 'chứng minh', 'chứng minh rằng', 'xác định', 'chứng tỏ',
+        'phương trình', 'bất phương trình', 'hệ phương trình', 'pt', 'bpt',
+        # Toán học
+        'hàm số', 'đạo hàm', 'tích phân', 'nguyên hàm', 'giới hạn', 'liên tục',
+        'lượng giác', 'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+        'logarit', 'log', 'ln', 'mũ', 'căn', 'sqrt', 'exp',
+        'hình học', 'tọa độ', 'vectơ', 'vector', 'đường thẳng', 'mặt phẳng', 'điểm',
+        'xác suất', 'tổ hợp', 'chỉnh hợp', 'hoán vị',
+        'số phức', 'ma trận', 'định thức',
+        # Vật lý
+        'lực', 'gia tốc', 'vận tốc', 'năng lượng', 'công', 'công suất',
+        'điện', 'điện trở', 'điện áp', 'dòng điện', 'mạch điện',
+        'sóng', 'dao động', 'tần số', 'bước sóng',
+        # Hóa học
+        'phản ứng', 'hóa học', 'hóa trị', 'nguyên tử', 'phân tử', 'ion',
+        'axit', 'bazơ', 'muối', 'oxi hóa', 'khử',
+        # Sinh học
+        'tế bào', 'adn', 'arn', 'protein', 'enzym', 'trao đổi chất',
+        # Từ khóa chung
+        'đề bài', 'bài tập', 'câu hỏi', 'đề thi', 'câu', 'bài',
+        'mệnh đề', 'đúng', 'sai', 'khẳng định',
+        # Môn học
+        'toán', 'lý', 'hóa', 'sinh', 'văn', 'anh', 'sử', 'địa',
+        'vật lý', 'hóa học', 'sinh học', 'ngữ văn', 'lịch sử', 'địa lý'
     ]
     
-    text_lower = text.lower()
     # Kiểm tra có chứa từ khóa học tập
     has_keyword = any(keyword in text_lower for keyword in educational_keywords)
     
     # Kiểm tra có công thức toán học (LaTeX)
-    has_math = '$' in text or '\\' in text
+    has_math = '$' in text_original or '\\' in text_original
     
-    # Kiểm tra có số và ký tự toán học
-    has_math_chars = any(char in text for char in ['+', '-', '×', '*', '/', '=', '√', '∫', '∑', 'π'])
+    # Kiểm tra có số và ký tự toán học (mở rộng)
+    math_chars = ['+', '-', '×', '*', '/', '=', '√', '∫', '∑', 'π', 'α', 'β', 'γ', 'δ', 'θ', 'λ', 'μ', 'σ', 'φ', 'ω', '∞', '≤', '≥', '≠', '≈']
+    has_math_chars = any(char in text_original for char in math_chars)
     
-    # Nếu có hình ảnh, chấp nhận (hình ảnh có thể chứa đề bài)
-    if has_image:
-        return True
+    # Kiểm tra pattern câu hỏi (Câu 1, Câu 2, a), b), c), d), ...)
+    has_question_pattern = (
+        'câu' in text_lower or 
+        'câu hỏi' in text_lower or
+        any(pattern in text_lower for pattern in ['a)', 'b)', 'c)', 'd)', 'e)', 'f)']) or
+        any(pattern in text_original for pattern in ['Câu 1', 'Câu 2', 'Câu 3', 'Câu 4', 'Câu 5'])
+    )
     
-    return has_keyword or has_math or has_math_chars
+    # Kiểm tra có chứa số và chữ cái (ví dụ: y = sinx, x^2, etc.)
+    import re
+    has_math_expression = bool(re.search(r'[a-z]\s*[=+\-*/]\s*[a-z0-9]', text_lower)) or \
+                          bool(re.search(r'[a-z]\s*\^\s*\d+', text_lower)) or \
+                          bool(re.search(r'\d+\s*[+\-*/]\s*\d+', text_original))
+    
+    # Nếu có ít nhất 2 trong các điều kiện sau, chấp nhận
+    conditions_met = sum([
+        has_keyword,
+        has_math,
+        has_math_chars,
+        has_question_pattern,
+        has_math_expression
+    ])
+    
+    # Chấp nhận nếu có ít nhất 1 điều kiện (giảm ngưỡng)
+    return conditions_met >= 1
 
 
 @router.post("/solve-post")
@@ -156,14 +205,104 @@ QUAN TRỌNG:
         
         logger.info(f"Solving post with text length: {len(post_text)}, has_image: {has_image}")
         
-        # Enhance prompt if image is provided
+        # Nếu có hình ảnh, ưu tiên bóc tách và phân tích từ hình ảnh
         if image_url:
-            prompt = f"""Bạn là trợ lý giải đáp câu hỏi học tập THPT. Hãy phân tích hình ảnh đính kèm và trả lời câu hỏi.
+            # Prompt ưu tiên hình ảnh - yêu cầu đọc và phân tích toàn bộ nội dung trong ảnh
+            image_analysis_prompt = f"""Bạn là trợ lý giải đáp câu hỏi học tập THPT chuyên phân tích hình ảnh.
 
-Hình ảnh đính kèm: {image_url}
-Nội dung kèm theo: {post_text if post_text else "Chỉ có hình ảnh, không có text"}
+NHIỆM VỤ:
+1. **ĐỌC VÀ BÓC TÁCH TOÀN BỘ NỘI DUNG** từ hình ảnh đính kèm (text, công thức, sơ đồ, biểu đồ, hình vẽ)
+2. **NHẬN DIỆN** xem hình ảnh có chứa câu hỏi, bài tập, đề bài, hoặc nội dung học tập không
+3. **GIẢI BÀI TẬP** nếu hình ảnh chứa câu hỏi/bài tập
 
-{prompt}"""
+HƯỚNG DẪN PHÂN TÍCH HÌNH ẢNH:
+- Đọc TẤT CẢ text trong hình ảnh (kể cả công thức toán học, ký hiệu)
+- Nhận diện các yếu tố: đề bài, câu hỏi, các phương án (a, b, c, d), hình vẽ, sơ đồ, biểu đồ
+- Phân tích công thức toán học, phương trình, biểu thức
+- Nhận diện hình học, đồ thị, biểu đồ
+- Nếu có text kèm theo, kết hợp với nội dung hình ảnh
+
+Nội dung text kèm theo (nếu có): {post_text if post_text else "Không có text, chỉ có hình ảnh"}
+
+Hãy phân tích hình ảnh và giải bài tập theo format dưới đây:"""
+            
+            prompt = f"""{image_analysis_prompt}
+
+Bạn là trợ lý giải đáp câu hỏi học tập THPT. Hãy trả lời NGẮN GỌN, GỌN GÀNG, MẠCH LẠC, TẬP TRUNG VÀO ĐÁP ÁN:
+
+FORMAT YÊU CẦU (BẮT BUỘC - PHẢI TUÂN THỦ):
+1. **Đáp án trực tiếp**: Viết ngắn gọn, đi thẳng vào vấn đề (1-2 câu)
+2. **Cách xác định** (nếu cần): Dùng heading ## Cách xác định và danh sách số thứ tự (1., 2., 3.) để liệt kê, mỗi số thứ tự phải xuống dòng riêng
+3. **Quy tắc** (nếu cần): Dùng heading ## Quy tắc và danh sách số thứ tự (1., 2., 3.) để liệt kê, mỗi số thứ tự phải xuống dòng riêng
+4. **Ví dụ** (nếu cần): Dùng heading ## Ví dụ và danh sách số thứ tự (1., 2., 3.) để liệt kê, mỗi số thứ tự phải xuống dòng riêng
+5. **Kết luận**: PHẢI in đậm bằng **Kết luận: [nội dung]** hoặc **Kết luận:** [nội dung in đậm]
+
+VÍ DỤ FORMAT ĐÚNG:
+**Đáp án: Hóa trị Fe có thể là II hoặc III.**
+
+## Cách xác định hóa trị
+1. Dựa vào công thức hợp chất
+2. Áp dụng quy tắc hóa trị
+3. Xem xét các hợp chất phổ biến
+
+## Quy tắc hóa trị
+1. Tổng hóa trị của các nguyên tố = 0
+2. Fe trong FeCl₂ có hóa trị II
+3. Fe trong FeCl₃ có hóa trị III
+
+## Ví dụ
+1. FeCl₂: Fe có hóa trị II
+2. Fe₂O₃: Fe có hóa trị III
+
+**Kết luận: Hóa trị Fe = 2, 3 là đúng.**
+
+QUAN TRỌNG:
+- Tổng độ dài: 80-150 từ, ngắn gọn nhưng đầy đủ
+- Dùng markdown: ## cho headings, - cho lists, **text** cho bold
+- KHÔNG giải thích dài dòng, KHÔNG viết "Hy vọng bạn đã hiểu"
+- Công thức toán học dùng LaTeX: $x^2$ hoặc $$\\int_0^1 x dx$$
+- Sắp xếp: Đáp án → Cách xác định → Quy tắc → Ví dụ → Kết luận (in đậm)
+- Mỗi phần phải rõ ràng, gọn gàng, dễ đọc
+- **ƯU TIÊN PHÂN TÍCH NỘI DUNG TỪ HÌNH ẢNH**, nếu hình ảnh chứa đề bài/câu hỏi thì giải dựa trên hình ảnh"""
+        else:
+            # Prompt thông thường khi không có hình ảnh
+            prompt = f"""Bạn là trợ lý giải đáp câu hỏi học tập THPT. Hãy trả lời NGẮN GỌN, GỌN GÀNG, MẠCH LẠC, TẬP TRUNG VÀO ĐÁP ÁN:
+
+{post_text}
+
+FORMAT YÊU CẦU (BẮT BUỘC - PHẢI TUÂN THỦ):
+1. **Đáp án trực tiếp**: Viết ngắn gọn, đi thẳng vào vấn đề (1-2 câu)
+2. **Cách xác định** (nếu cần): Dùng heading ## Cách xác định và danh sách số thứ tự (1., 2., 3.) để liệt kê, mỗi số thứ tự phải xuống dòng riêng
+3. **Quy tắc** (nếu cần): Dùng heading ## Quy tắc và danh sách số thứ tự (1., 2., 3.) để liệt kê, mỗi số thứ tự phải xuống dòng riêng
+4. **Ví dụ** (nếu cần): Dùng heading ## Ví dụ và danh sách số thứ tự (1., 2., 3.) để liệt kê, mỗi số thứ tự phải xuống dòng riêng
+5. **Kết luận**: PHẢI in đậm bằng **Kết luận: [nội dung]** hoặc **Kết luận:** [nội dung in đậm]
+
+VÍ DỤ FORMAT ĐÚNG:
+**Đáp án: Hóa trị Fe có thể là II hoặc III.**
+
+## Cách xác định hóa trị
+1. Dựa vào công thức hợp chất
+2. Áp dụng quy tắc hóa trị
+3. Xem xét các hợp chất phổ biến
+
+## Quy tắc hóa trị
+1. Tổng hóa trị của các nguyên tố = 0
+2. Fe trong FeCl₂ có hóa trị II
+3. Fe trong FeCl₃ có hóa trị III
+
+## Ví dụ
+1. FeCl₂: Fe có hóa trị II
+2. Fe₂O₃: Fe có hóa trị III
+
+**Kết luận: Hóa trị Fe = 2, 3 là đúng.**
+
+QUAN TRỌNG:
+- Tổng độ dài: 80-150 từ, ngắn gọn nhưng đầy đủ
+- Dùng markdown: ## cho headings, - cho lists, **text** cho bold
+- KHÔNG giải thích dài dòng, KHÔNG viết "Hy vọng bạn đã hiểu"
+- Công thức toán học dùng LaTeX: $x^2$ hoặc $$\\int_0^1 x dx$$
+- Sắp xếp: Đáp án → Cách xác định → Quy tắc → Ví dụ → Kết luận (in đậm)
+- Mỗi phần phải rõ ràng, gọn gàng, dễ đọc"""
         
         try:
             # Use gemini-2.5-flash-preview-image for feed page solutions (supports diagrams/illustrations)

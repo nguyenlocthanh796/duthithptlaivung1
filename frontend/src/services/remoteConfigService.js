@@ -4,7 +4,7 @@
  */
 
 import { fetchAndActivate, getValue } from 'firebase/remote-config'
-import { remoteConfig } from '../firebase'
+import { getRemoteConfigInstance } from '../firebase'
 
 /**
  * Fetch and activate remote config
@@ -20,6 +20,7 @@ export async function fetchRemoteConfig() {
       return true
     }
     
+    const remoteConfig = getRemoteConfigInstance()
     await fetchAndActivate(remoteConfig)
     lastFetchTime = now
     console.log('Remote Config fetched and activated')
@@ -35,6 +36,7 @@ export async function fetchRemoteConfig() {
  */
 export function getConfigValue(key, defaultValue = null) {
   try {
+    const remoteConfig = getRemoteConfigInstance()
     const value = getValue(remoteConfig, key)
     return value.asString() || defaultValue
   } catch (error) {
@@ -48,6 +50,7 @@ export function getConfigValue(key, defaultValue = null) {
  */
 export function getConfigBoolean(key, defaultValue = false) {
   try {
+    const remoteConfig = getRemoteConfigInstance()
     const value = getValue(remoteConfig, key)
     return value.asBoolean() ?? defaultValue
   } catch (error) {
@@ -61,6 +64,7 @@ export function getConfigBoolean(key, defaultValue = false) {
  */
 export function getConfigNumber(key, defaultValue = 0) {
   try {
+    const remoteConfig = getRemoteConfigInstance()
     const value = getValue(remoteConfig, key)
     return value.asNumber() ?? defaultValue
   } catch (error) {

@@ -4,7 +4,7 @@
  */
 
 import { getToken, onMessage } from 'firebase/messaging'
-import { messaging } from '../firebase'
+import { getMessagingInstance } from '../firebase'
 import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 
@@ -50,6 +50,7 @@ async function registerServiceWorker() {
  * Request notification permission and get FCM token
  */
 export async function requestNotificationPermission() {
+  const messaging = getMessagingInstance()
   if (!messaging) {
     console.warn('FCM not available')
     return null
@@ -112,6 +113,7 @@ export async function saveFCMToken(userId, token) {
  * Listen for foreground messages (when app is open)
  */
 export function onForegroundMessage(callback) {
+  const messaging = getMessagingInstance()
   if (!messaging) {
     console.warn('FCM not available')
     return () => {}

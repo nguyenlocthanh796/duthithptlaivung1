@@ -54,43 +54,74 @@ const db = getFirestore(app)
 // - 1GB storage
 // - Offline persistence is free and reduces reads
 
-// Realtime Database - for live quiz (low latency, realtime sync)
-const rtdb = getDatabase(app)
-// Note: RTDB free tier includes:
-// - 1GB storage
-// - 100 concurrent connections
-// - Perfect for live quiz with 100+ users
-
-// Cloud Messaging - for push notifications
-let messaging = null
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  try {
-    messaging = getMessaging(app)
-  } catch (e) {
-    console.warn('FCM not available:', e)
+// Realtime Database - lazy loaded (only needed for live quiz)
+let rtdb = null
+export const getRTDB = () => {
+  if (!rtdb) {
+    rtdb = getDatabase(app)
   }
+  return rtdb
 }
 
-// Remote Config - for dynamic configuration
-const remoteConfig = getRemoteConfig(app)
-remoteConfig.settings.minimumFetchIntervalMillis = 3600000 // 1 hour cache
-// Set default values
-remoteConfig.defaultConfig = {
-  show_ai_tutor: true,
-  enable_live_quiz: true,
-  theme_color: '#2563eb',
-  maintenance_mode: false,
+// Cloud Messaging - lazy loaded (only needed when user logs in)
+let messaging = null
+export const getMessagingInstance = () => {
+  if (!messaging && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    try {
+      messaging = getMessaging(app)
+    } catch (e) {
+      console.warn('FCM not available:', e)
+    }
+  }
+  return messaging
 }
 
-// Cloud Functions
-const functions = getFunctions(app)
+// Remote Config - lazy loaded (only needed when app initializes)
+let remoteConfig = null
+export const getRemoteConfigInstance = () => {
+  if (!remoteConfig) {
+    remoteConfig = getRemoteConfig(app)
+    remoteConfig.settings.minimumFetchIntervalMillis = 3600000 // 1 hour cache
+    // Set default values
+    remoteConfig.defaultConfig = {
+      show_ai_tutor: true,
+      enable_live_quiz: true,
+      theme_color: '#2563eb',
+      maintenance_mode: false,
+    }
+  }
+  return remoteConfig
+}
 
-// Firebase Storage - for file uploads
-const storage = getStorage(app)
+// Cloud Functions - lazy loaded (only needed when calling functions)
+let functions = null
+export const getFunctionsInstance = () => {
+  if (!functions) {
+    functions = getFunctions(app)
+  }
+  return functions
+}
+
+// Firebase Storage - lazy loaded (only needed when uploading files)
+let storage = null
+export const getStorageInstance = () => {
+  if (!storage) {
+    storage = getStorage(app)
+  }
+  return storage
+}
 // Note: Firebase Storage free tier includes:
 // - 10GB storage
 // - 1GB download/day
 // - CDN integrated
 // - Perfect for small projects
 
-export { app, auth, provider, db, rtdb, messaging, remoteConfig, functions, storage }
+// Export core services (needed immediately)
+export { app, auth, provider, db }
+
+// Note: Lazy-loaded getters are already exported inline above:
+// - getRTDB
+// - getMessagingInstance
+// - getRemoteConfigInstance
+// - getFunctionsInstance
+// - getStorageInstance

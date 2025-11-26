@@ -4,7 +4,7 @@
  */
 
 import { ref, set, onValue, off, push, update, get } from 'firebase/database'
-import { rtdb } from '../firebase'
+import { getRTDB } from '../firebase'
 
 /**
  * Create a new live quiz session
@@ -13,6 +13,7 @@ import { rtdb } from '../firebase'
  * @returns {Promise<string>} Quiz ID
  */
 export async function createLiveQuiz(teacherId, quizData) {
+  const rtdb = getRTDB()
   const quizRef = push(ref(rtdb, 'quiz'))
   const quizId = quizRef.key
 
@@ -42,6 +43,7 @@ export async function createLiveQuiz(teacherId, quizData) {
  * @param {string} quizId - Quiz ID
  */
 export async function startQuiz(quizId) {
+  const rtdb = getRTDB()
   const quizRef = ref(rtdb, `quiz/${quizId}`)
   await update(quizRef, {
     status: 'question_1',
@@ -56,6 +58,7 @@ export async function startQuiz(quizId) {
  * @param {number} questionNumber - Next question number
  */
 export async function nextQuestion(quizId, questionNumber) {
+  const rtdb = getRTDB()
   const quizRef = ref(rtdb, `quiz/${quizId}`)
   await update(quizRef, {
     status: `question_${questionNumber}`,
@@ -68,6 +71,7 @@ export async function nextQuestion(quizId, questionNumber) {
  * @param {string} quizId - Quiz ID
  */
 export async function endQuiz(quizId) {
+  const rtdb = getRTDB()
   const quizRef = ref(rtdb, `quiz/${quizId}`)
   await update(quizRef, {
     status: 'finished',
@@ -82,6 +86,7 @@ export async function endQuiz(quizId) {
  * @param {string} answer - Selected answer (A, B, C, D)
  */
 export async function submitAnswer(quizId, userId, questionNumber, answer) {
+  const rtdb = getRTDB()
   const answerRef = ref(rtdb, `quiz/${quizId}/answers/${userId}`)
   
   // Get current answers
@@ -103,6 +108,7 @@ export async function submitAnswer(quizId, userId, questionNumber, answer) {
  * @returns {Function} Unsubscribe function
  */
 export function watchQuizStatus(quizId, callback) {
+  const rtdb = getRTDB()
   const statusRef = ref(rtdb, `quiz/${quizId}/status`)
   
   onValue(statusRef, (snapshot) => {
@@ -120,6 +126,7 @@ export function watchQuizStatus(quizId, callback) {
  * @returns {Function} Unsubscribe function
  */
 export function watchQuiz(quizId, callback) {
+  const rtdb = getRTDB()
   const quizRef = ref(rtdb, `quiz/${quizId}`)
   
   onValue(quizRef, (snapshot) => {
@@ -137,6 +144,7 @@ export function watchQuiz(quizId, callback) {
  * @returns {Function} Unsubscribe function
  */
 export function watchLeaderboard(quizId, callback) {
+  const rtdb = getRTDB()
   const leaderboardRef = ref(rtdb, `quiz/${quizId}/leaderboard`)
   
   onValue(leaderboardRef, (snapshot) => {
@@ -156,6 +164,7 @@ export function watchLeaderboard(quizId, callback) {
  * @param {string} quizId - Quiz ID
  */
 export async function calculateLeaderboard(quizId) {
+  const rtdb = getRTDB()
   const quizRef = ref(rtdb, `quiz/${quizId}`)
   const snapshot = await get(quizRef)
   const quiz = snapshot.val()
@@ -201,6 +210,7 @@ export async function calculateLeaderboard(quizId) {
  * @returns {Promise<Object>} Quiz data
  */
 export async function getQuiz(quizId) {
+  const rtdb = getRTDB()
   const quizRef = ref(rtdb, `quiz/${quizId}`)
   const snapshot = await get(quizRef)
   return snapshot.val()

@@ -84,10 +84,11 @@ export const getMorePosts = async (lastPost, limitCount = 20) => {
     .filter((post) => !post.isHidden) // Filter client side
 }
 
-export const createPost = async ({ text, imageUrl, documentUrl, documentType, tags, author }) => {
+export const createPost = async ({ text, imageUrl, imageUrls, documentUrl, documentType, tags, author }) => {
   await addDoc(postsCollection, {
     text,
-    imageUrl: imageUrl || null,
+    imageUrl: imageUrl || (imageUrls && imageUrls.length > 0 ? imageUrls[0] : null) || null, // Backward compatible
+    imageUrls: imageUrls || (imageUrl ? [imageUrl] : null), // Support multiple images
     documentUrl: documentUrl || null,
     documentType: documentType || null,
     tags: tags || [],

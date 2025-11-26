@@ -56,20 +56,71 @@ export default defineConfig({
   server: {
     allowedHosts: true,
   },
-  // Tối ưu build
+  // Tối ưu build - tăng tốc độ load
   build: {
     // Chunk size warning limit
     chunkSizeWarningLimit: 1000,
+    // Minify và optimize - dùng esbuild (nhanh hơn terser)
+    minify: 'esbuild',
+    // Tối ưu sourcemap cho production
+    sourcemap: false,
+    // Tối ưu CSS
+    cssCodeSplit: true,
+    // Tối ưu assets
+    assetsInlineLimit: 4096, // Inline assets < 4KB
     rollupOptions: {
       output: {
-        // Manual chunks để tách các thư viện lớn
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'firebase-vendor': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
-          'ui-vendor': ['@headlessui/react', '@heroicons/react'],
-          'chart-vendor': ['recharts'],
-          'math-vendor': ['katex', 'react-katex'],
+        // Manual chunks để tách các thư viện lớn - tối ưu cho code splitting
+        manualChunks: (id) => {
+          // React core
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'react-vendor'
+          }
+          // React Router
+          if (id.includes('node_modules/react-router')) {
+            return 'react-router-vendor'
+          }
+          // Firebase - tách riêng từng service để lazy load tốt hơn
+          if (id.includes('node_modules/firebase/')) {
+            if (id.includes('firebase/auth')) return 'firebase-auth'
+            if (id.includes('firebase/firestore')) return 'firebase-firestore'
+            if (id.includes('firebase/storage')) return 'firebase-storage'
+            if (id.includes('firebase/database')) return 'firebase-database'
+            if (id.includes('firebase/messaging')) return 'firebase-messaging'
+            if (id.includes('firebase/functions')) return 'firebase-functions'
+            if (id.includes('firebase/remote-config')) return 'firebase-remote-config'
+            if (id.includes('firebase/analytics')) return 'firebase-analytics'
+            return 'firebase-core'
+          }
+          // UI libraries
+          if (id.includes('node_modules/@headlessui') || id.includes('node_modules/@heroicons')) {
+            return 'ui-vendor'
+          }
+          // Lucide React - tách riêng vì lớn
+          if (id.includes('node_modules/lucide-react')) {
+            return 'lucide-vendor'
+          }
+          // Math rendering
+          if (id.includes('node_modules/katex') || id.includes('node_modules/react-katex')) {
+            return 'math-vendor'
+          }
+          // Charts
+          if (id.includes('node_modules/recharts')) {
+            return 'chart-vendor'
+          }
+          // Day.js
+          if (id.includes('node_modules/dayjs')) {
+            return 'dayjs-vendor'
+          }
+          // Axios
+          if (id.includes('node_modules/axios')) {
+            return 'axios-vendor'
+          }
         },
+        // Tối ưu tên file chunks
+        chunkFileNames: 'assets/js/[name]-[hash].js',
+        entryFileNames: 'assets/js/[name]-[hash].js',
+        assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
       },
     },
   },

@@ -4,6 +4,7 @@ const SidebarContext = createContext(null)
 
 export function SidebarProvider({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
 
   const toggleSidebar = () => {
@@ -25,6 +26,8 @@ export function SidebarProvider({ children }) {
       toggleSidebar, 
       openSidebar, 
       closeSidebar,
+      rightSidebarOpen,
+      setRightSidebarOpen,
       isMobile,
       setIsMobile
     }}>

@@ -1,9 +1,13 @@
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
+import { useState, useEffect, useRef, memo, useMemo, useCallback, lazy, Suspense } from 'react'
+import { Heart, MessageSquare, PenTool, MoreHorizontal, CheckCircle } from 'lucide-react'
 import { renderTextWithLatex } from '../utils/latexRenderer'
-import { SolutionModal } from './SolutionModal'
-import { ImageModal } from './ImageModal'
 import logger from '../utils/logger'
+
+// Lazy load heavy components
+const SolutionModal = lazy(() => import('./SolutionModal').then(module => ({ default: module.SolutionModal })))
+const ImageModal = lazy(() => import('./ImageModal').then(module => ({ default: module.ImageModal })))
 import {
   toggleLike,
   addComment,
@@ -30,7 +34,6 @@ import {
   isPostSaved,
 } from '../services/firestore'
 import { solvePost as solvePostAPI } from '../services/api'
-import { useState, useEffect, useRef, memo, useMemo, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from './Toast'
 
@@ -64,6 +67,7 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
   const [isSaving, setIsSaving] = useState(false)
   const [showSolutionModal, setShowSolutionModal] = useState(false)
   const [showImageModal, setShowImageModal] = useState(false)
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   
   // Load saved posts
   useEffect(() => {
@@ -575,103 +579,95 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
     }
   }
 
+  // Get user badge color based on role (from post author, not current user)
+  const getUserBadgeColor = () => {
+    // Default colors - can be enhanced with actual author roles from post
+    return 'bg-blue-600'
+  }
+
+  // Format likes count for display
+  const formatLikesCount = (count) => {
+    if (count === 0) return ''
+    if (count < 1000) return count.toString()
+    if (count < 1000000) return `${(count / 1000).toFixed(1)}K`
+    return `${(count / 1000000).toFixed(1)}M`
+  }
+
   return (
-    <article className="bg-white dark:bg-slate-800 rounded border border-slate-200/30 dark:border-slate-700/30 overflow-hidden">
-      {/* Post Header - Facebook Style */}
-      <header className="px-4 pt-4 pb-2">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3 flex-1">
-        <img
-          src={post.author?.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${post.author?.name}`}
-          alt={post.author?.name}
-              className="h-10 w-10 rounded-full object-cover ring-2 ring-slate-100 hover:ring-gemini-blue/50 transition cursor-pointer"
+    <article className="bg-white border-b border-gray-200 overflow-hidden">
+      {/* Header - Facebook Style - Tối ưu hóa */}
+      <div className="px-3 pt-2.5 pb-1.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {/* Profile Picture - Smaller like Facebook */}
+            <img
+              src={post.author?.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${post.author?.name || post.author?.displayName || 'User'}`}
+              alt={post.author?.name || post.author?.displayName}
+              className="w-9 h-9 rounded-full object-cover flex-shrink-0"
             />
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-[15px] font-semibold text-slate-900 dark:text-slate-100 hover:underline cursor-pointer">
-                  {post.author?.name}
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-semibold text-sm text-gray-900 hover:underline cursor-pointer truncate">
+                  {post.author?.name || post.author?.displayName || 'Người dùng'}
                 </h3>
-                {post.editedAt && (
-                  <span className="text-xs text-slate-400 dark:text-slate-500">(đã chỉnh sửa)</span>
+                {(userRoles.includes('teacher') || userRoles.includes('admin')) && (
+                  <CheckCircle size={12} className="text-blue-500 fill-blue-100 flex-shrink-0" />
                 )}
-          </div>
-              <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                <span>{dayjs(post.createdAt?.toDate?.() || post.createdAt).fromNow()}</span>
-                <span>·</span>
-                <span>🌐</span>
-        </div>
-            </div>
-          </div>
-          
-          {/* Tags */}
-          {post.tags && Array.isArray(post.tags) && post.tags.length > 0 && (
-            <div className="px-4 pb-2 flex flex-wrap gap-1.5">
-              {post.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-block bg-gemini-blue/10 text-gemini-blue px-2 py-0.5 rounded text-xs font-medium hover:bg-gemini-blue/20 cursor-pointer transition"
-                  onClick={() => {
-                    // Filter by tag - trigger search with tag
-                    if (onSearch) {
-                      onSearch({ query: tag, subject: '', type: '', time: '' })
-                    }
-                  }}
-                >
-                  #{tag}
+                <span className="text-gray-500 text-xs">•</span>
+                <span className="text-gray-500 text-xs hover:underline cursor-pointer">
+                  {dayjs(post.createdAt?.toDate?.() || post.createdAt).fromNow()}
                 </span>
-              ))}
+              </div>
             </div>
-          )}
-          
-          <div className="relative more-menu-container">
-        {canEditPost && !isEditingPost && (
-          <button
-                onClick={() => setShowMoreMenu(!showMoreMenu)}
-                className="h-8 w-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition"
-                title="Tùy chọn"
+          </div>
+          <button 
+            onClick={() => setShowMoreMenu(!showMoreMenu)}
+            className="text-gray-500 hover:bg-gray-100 p-1 rounded-full transition-colors flex-shrink-0"
           >
-                <svg className="w-5 h-5 text-slate-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                </svg>
+            <MoreHorizontal size={18} />
           </button>
-        )}
-            {showMoreMenu && (
-              <div className="absolute right-0 top-10 bg-white rounded border border-slate-200/30 dark:border-slate-800/30 py-1 z-10 min-w-[160px]">
+        </div>
+        {/* More Menu Dropdown */}
+        {showMoreMenu && (
+          <div className="relative">
+            {canEditPost && !isEditingPost && (
+              <div className="absolute right-0 top-2 bg-white rounded-lg border border-gray-200 py-1 z-50 min-w-[160px] shadow-xl">
+              <button
+                onClick={() => {
+                  handleEditPost()
+                  setShowMoreMenu(false)
+                }}
+                className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left flex items-center gap-2"
+              >
+                <span>✏️</span>
+                <span>Chỉnh sửa</span>
+              </button>
+              {isPostAuthor && (
                 <button
                   onClick={() => {
-                    handleEditPost()
+                    handleDeletePost()
                     setShowMoreMenu(false)
                   }}
-                  className="w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 text-left flex items-center gap-2"
+                  className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2 transition"
                 >
-                  <span>✏️</span>
-                  <span>Chỉnh sửa</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Xóa bài viết</span>
                 </button>
-                {isPostAuthor && (
-                  <button
-                    onClick={() => {
-                      handleDeletePost()
-                      setShowMoreMenu(false)
-                    }}
-                    className="w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left flex items-center gap-2 transition"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    <span>Xóa bài viết</span>
-                  </button>
-                )}
+              )}
               </div>
             )}
           </div>
-        </div>
-      </header>
-      
-      <div className="mt-3">
+        )}
+      </div>
+
+      {/* Content - Tối ưu hóa spacing */}
+      <div className="px-3 pb-2">
         {isEditingPost ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             <textarea
-              className="w-full border border-slate-200 bg-white p-3 text-base focus:border-gemini-blue focus:outline-none focus:ring-1 focus:ring-gemini-blue"
+              className="w-full border border-slate-200 bg-white p-2 text-sm focus:border-gemini-blue focus:outline-none focus:ring-1 focus:ring-gemini-blue"
               rows="4"
               value={editPostText}
               onChange={(e) => setEditPostText(e.target.value)}
@@ -706,32 +702,63 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
             </div>
           </div>
         ) : (
-          <div className="px-4 pb-3">
-            <div className="text-[15px] leading-relaxed text-slate-900 dark:text-slate-100">
-              {renderTextWithLatex(post.text)}
-            </div>
+          <div className="text-sm leading-relaxed text-gray-900 break-words">
+            {renderTextWithLatex(post.text)}
           </div>
         )}
       </div>
 
-      {/* Hiển thị ảnh */}
-      {post.imageUrl && (
-        <div className="mt-3 cursor-pointer" onClick={() => setShowImageModal(true)}>
-          <img
-            src={post.imageUrl}
-            alt="Bài viết"
-            className="max-h-96 w-full border border-slate-200 dark:border-slate-700 object-contain hover:opacity-90 transition"
-          />
+      {/* Hiển thị ảnh - Tối ưu hóa - Hỗ trợ nhiều ảnh */}
+      {(post.imageUrls && post.imageUrls.length > 0) || post.imageUrl ? (
+        <div className="w-full">
+          {/* Hiển thị nhiều ảnh */}
+          {post.imageUrls && post.imageUrls.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              {post.imageUrls.map((url, index) => (
+                <div 
+                  key={index}
+                  className="cursor-pointer relative"
+                  onClick={() => {
+                    setSelectedImageIndex(index)
+                    setShowImageModal(true)
+                  }}
+                >
+                  <img
+                    src={url}
+                    alt={`Bài viết ${index + 1}`}
+                    className="w-full h-48 object-cover rounded-lg bg-gray-50"
+                  />
+                  {post.imageUrls.length > 4 && index === 3 && (
+                    <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center text-white font-bold text-lg">
+                      +{post.imageUrls.length - 4}
+                    </div>
+                  )}
+                </div>
+              )).slice(0, 4)}
+            </div>
+          ) : (
+            // Fallback: hiển thị 1 ảnh
+            <div className="w-full cursor-pointer" onClick={() => {
+              setSelectedImageIndex(0)
+              setShowImageModal(true)
+            }}>
+              <img
+                src={post.imageUrl}
+                alt="Bài viết"
+                className="w-full max-h-[500px] object-contain bg-gray-50 rounded-lg"
+              />
+            </div>
+          )}
         </div>
-      )}
+      ) : null}
 
-      {/* Hiển thị tài liệu */}
+      {/* Hiển thị tài liệu - Tối ưu hóa */}
       {post.documentUrl && (
         <a
           href={post.documentUrl}
           target="_blank"
           rel="noreferrer"
-          className="mt-3 flex items-center gap-2 border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition hover:border-gemini-blue hover:bg-gemini-blue/5"
+          className="mx-3 mb-2 flex items-center gap-2 border border-gray-200 bg-gray-50 px-3 py-2 rounded-lg text-xs text-gray-700 transition hover:bg-gray-100"
         >
           <svg className="w-5 h-5 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -747,7 +774,7 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
 
       {/* Trạng thái vi phạm */}
       {post.isPendingReview && (
-        <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded">
+        <div className="mx-4 mb-2 p-3 bg-gray-100 border border-gray-300 rounded-lg">
           <div className="flex items-center gap-2">
             <svg className="w-4 h-4 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -779,120 +806,103 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
         </div>
       )}
 
-      {/* Action Bar - Facebook Style */}
-      <div className="px-4 py-2 border-t border-slate-200/30 dark:border-slate-800/30">
-        <div className="flex items-center justify-between text-slate-600 dark:text-slate-400 text-sm mb-2">
+      {/* Reactions Bar - Facebook Style - Tối ưu hóa */}
+      {(likes.length > 0 || comments.length > 0) && (
+        <div className="px-3 py-1.5 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
           <div className="flex items-center gap-1">
             {likes.length > 0 && (
-              <div className="flex items-center gap-1">
-                <svg className="w-4 h-4 fill-current text-slate-700 dark:text-slate-300" viewBox="0 0 24 24">
-                  <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-                </svg>
-                <span className="text-slate-600 dark:text-slate-400">{likes.length}</span>
-              </div>
+              <>
+                <div className="flex items-center -space-x-1">
+                  <div className="w-4 h-4 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center">
+                    <span className="text-white text-[8px]">👍</span>
+                  </div>
+                  <div className="w-4 h-4 rounded-full bg-red-500 border-2 border-white flex items-center justify-center">
+                    <span className="text-white text-[8px]">❤️</span>
+                  </div>
+                </div>
+                <span className="ml-1">{formatLikesCount(likes.length)}</span>
+              </>
             )}
+          </div>
+          <div className="flex items-center gap-3">
             {comments.length > 0 && (
-              <div className="flex items-center gap-1 ml-4">
-                <span>{comments.length}</span>
-                <span>bình luận</span>
-              </div>
+              <span className="hover:underline cursor-pointer">{comments.length} bình luận</span>
             )}
           </div>
         </div>
-        
-        {/* Action Buttons - 1 hàng: Tym, Bình luận, Giải đáp/Kết quả */}
-        <div className="flex items-center gap-1">
-          <button
+      )}
+
+      {/* Action Buttons - Facebook Style - Tối ưu hóa */}
+      <div className="px-2 border-t border-gray-200">
+        <div className="flex items-center">
+          <button 
             onClick={() => toggleLike({ postId: post.id, userId })}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg transition ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-colors ${
               liked 
-                ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' 
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'text-blue-600 hover:bg-blue-50' 
+                : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            <svg
-              className={`w-5 h-5 ${liked ? 'fill-current' : 'stroke-current'}`}
-              fill={liked ? 'currentColor' : 'none'}
-              strokeWidth={liked ? 0 : 2}
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
-              />
-            </svg>
-            <span className="text-sm font-medium">Thích</span>
+            <Heart size={18} className={liked ? 'fill-blue-600 text-blue-600' : ''} />
+            <span className="font-medium text-sm">Thích</span>
           </button>
-          <button
-            className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+          <button 
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
             onClick={() => document.querySelector(`#comment-input-${post.id}`)?.focus()}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <span className="text-sm font-medium">Bình luận</span>
+            <MessageSquare size={18} />
+            <span className="font-medium text-sm">Bình luận</span>
           </button>
           {post.solution ? (
             <button
               onClick={() => setShowSolutionModal(true)}
-              className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span className="text-sm font-medium">Kết quả</span>
+              <PenTool size={18} />
+              <span className="font-medium text-sm">Lời Giải</span>
             </button>
           ) : (
             <button
               onClick={handleSolvePost}
               disabled={isSolvingPost}
-              className="flex-1 flex items-center justify-center gap-2 py-2 px-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-50"
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
             >
-              {isSolvingPost ? (
-                <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              )}
-              <span className="text-sm font-medium">{isSolvingPost ? 'Đang giải...' : 'Giải đáp'}</span>
+              <PenTool size={18} />
+              <span className="font-medium text-sm">{isSolvingPost ? 'Đang giải...' : 'Giải đáp'}</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Comment Input - Facebook Style */}
-      <div className="px-4 pb-3 border-t border-slate-100">
-        <form onSubmit={handleAddComment} className="flex items-start gap-2 pt-3">
+      {/* Comment Input - Facebook Style - Tối ưu hóa */}
+      <div className="px-3 py-2 border-t border-gray-200">
+        <form onSubmit={handleAddComment} className="flex items-center gap-2">
           <img
             src={currentUser?.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${currentUser?.displayName || 'User'}`}
             alt={currentUser?.displayName}
-            className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+            className="h-7 w-7 rounded-full object-cover flex-shrink-0"
           />
-          <div className="flex-1 flex items-center gap-2 bg-slate-100 rounded-full px-3 py-2 focus-within:bg-white focus-within:ring-2 focus-within:ring-gemini-blue/20 transition">
-        <input
+          <div className="flex-1 flex items-center gap-2 bg-gray-100 rounded-full px-3 py-1.5 focus-within:bg-white focus-within:ring-1 focus-within:ring-gray-300 transition">
+            <input
               id={`comment-input-${post.id}`}
-              className="flex-1 bg-transparent text-sm text-slate-900 placeholder-slate-500 focus:outline-none"
-          placeholder="Viết bình luận..."
-          value={commentText}
-          onChange={(event) => setCommentText(event.target.value)}
-        />
+              className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-500 focus:outline-none"
+              placeholder="Viết bình luận..."
+              value={commentText}
+              onChange={(event) => setCommentText(event.target.value)}
+            />
             {commentText.trim() && (
               <button
                 type="submit"
-                className="text-gemini-blue font-semibold text-sm hover:text-gemini-blue/80 transition px-2"
+                className="text-blue-600 font-semibold text-[15px] hover:text-blue-700 transition px-2"
               >
                 Đăng
               </button>
             )}
           </div>
-      </form>
+        </form>
       </div>
-      {/* Comments Section - Facebook Style */}
-      <div className="px-4 pb-4">
+      {/* Comments Section - Facebook Style - Tối ưu hóa */}
+      <div className="px-3 pb-2">
         {comments.length > 0 && (
           <div className="space-y-1">
         {comments.map((comment, index) => {
@@ -905,20 +915,20 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
           return (
                 <div key={`${comment.authorId}-${index}-${comment.createdAt}`} className="group">
                   {/* Main Comment */}
-                  <div className="flex items-start gap-2 py-1 hover:bg-slate-50 rounded-lg px-1 -mx-1 transition">
+                  <div className="flex items-start gap-2 py-1">
                     <img
                       src={comment.authorPhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${comment.authorName}`}
                       alt={comment.authorName}
-                      className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                      className="h-7 w-7 rounded-full object-cover flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="inline-block bg-slate-100 dark:bg-slate-700 rounded-lg px-3 py-2 max-w-full">
-                        <div className="flex items-baseline gap-2 mb-1">
-                          <span className="text-sm font-semibold text-slate-900 hover:underline cursor-pointer">
+                      <div className="inline-block bg-gray-100 rounded-lg px-2.5 py-1.5 max-w-full">
+                        <div className="flex items-baseline gap-1.5 mb-0.5">
+                          <span className="text-xs font-semibold text-gray-900 hover:underline cursor-pointer">
                 {comment.authorName || 'Người dùng'}
               </span>
                           {comment.editedAt && (
-                            <span className="text-xs text-slate-400">(đã chỉnh sửa)</span>
+                            <span className="text-[10px] text-gray-400">(đã chỉnh sửa)</span>
                           )}
                         </div>
                         {isEditingComment ? (
@@ -948,7 +958,7 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
                             </div>
                           </div>
                         ) : (
-                          <div className="text-sm text-slate-900 leading-relaxed">
+                          <div className="text-xs text-slate-900 leading-relaxed">
                             {renderTextWithLatex(comment.text)}
                           </div>
                         )}
@@ -1108,9 +1118,9 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
                               className="h-7 w-7 rounded-full object-cover flex-shrink-0"
                             />
                             <div className="flex-1 min-w-0">
-                              <div className="inline-block bg-slate-100 dark:bg-slate-700 rounded-lg px-3 py-2 max-w-full">
+                              <div className="inline-block bg-gray-100 rounded-lg px-3 py-2 max-w-full">
                                 <div className="flex items-baseline gap-2 mb-1">
-                                  <span className="text-sm font-semibold text-slate-900 hover:underline cursor-pointer">
+                                  <span className="text-sm font-semibold text-gray-900 hover:underline cursor-pointer">
                                     {reply.authorName || 'Người dùng'}
                                   </span>
                                   {reply.editedAt && (
@@ -1210,7 +1220,8 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
       </div>
 
       {/* Solution Modal */}
-      <SolutionModal
+      <Suspense fallback={null}>
+        <SolutionModal
         isOpen={showSolutionModal}
         onClose={() => {
           setShowSolutionModal(false)
@@ -1241,13 +1252,19 @@ const PostItem = memo(function PostItem({ post, userId, userRoles = [], currentU
         }}
         onDeleteSolution={handleDeletePostSolution}
         isFlagged={post.isFlagged}
-      />
-      <ImageModal
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ImageModal
         isOpen={showImageModal}
         onClose={() => setShowImageModal(false)}
-        imageUrl={post.imageUrl}
+        imageUrl={(post.imageUrls && post.imageUrls.length > 0) ? post.imageUrls[selectedImageIndex] : post.imageUrl}
+        imageUrls={post.imageUrls || (post.imageUrl ? [post.imageUrl] : null)}
+        currentIndex={selectedImageIndex}
+        onIndexChange={setSelectedImageIndex}
         alt="Bài viết"
-      />
+        />
+      </Suspense>
     </article>
   )
 }, (prevProps, nextProps) => {
@@ -1272,7 +1289,7 @@ export const PostList = memo(function PostList({ posts, userId, userRoles = [], 
   }
   
   return (
-    <div className="space-y-4">
+    <div className="space-y-2 md:space-y-3">
       {memoizedPosts.map((post, index) => {
         const isLastPost = index === memoizedPosts.length - 1
         return (

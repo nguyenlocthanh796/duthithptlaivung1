@@ -632,7 +632,6 @@ export function TeacherPage() {
             )}
           </div>
         </section>
-      )}
 
       {/* Advanced Processing Tab */}
       {activeTab === 'advanced' && (

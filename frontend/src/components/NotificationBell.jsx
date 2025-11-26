@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { watchNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../services/firestore'
 import { useAuth } from '../hooks/useAuth'
+import { Bell } from 'lucide-react'
 
 export function NotificationBell() {
   const { user } = useAuth()
@@ -68,26 +69,22 @@ export function NotificationBell() {
     <div className="relative">
       <button
         onClick={() => setShowDropdown(!showDropdown)}
-        className="relative rounded-full p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+        className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-        </svg>
+        <Bell size={20} />
         {unreadCount > 0 && (
-          <span className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-gemini-blue text-xs font-bold text-white">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
         )}
       </button>
 
       {showDropdown && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-200/30 dark:border-slate-800/30 p-3">
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Thông báo</h3>
+        <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-gray-200 bg-white shadow-lg">
+          <div className="flex items-center justify-between border-b border-gray-200 p-3">
+            <h3 className="font-semibold text-gray-900">Thông báo</h3>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllAsRead}
-                className="text-xs text-gemini-blue hover:underline"
+                className="text-xs text-blue-600 hover:underline"
               >
                 Đánh dấu đã đọc tất cả
               </button>
@@ -95,7 +92,7 @@ export function NotificationBell() {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo</div>
+              <div className="p-4 text-center text-sm text-gray-500">Chưa có thông báo</div>
             ) : (
               notifications.map((notif) => (
                 <div
@@ -106,25 +103,25 @@ export function NotificationBell() {
                     }
                     setShowDropdown(false)
                   }}
-                  className={`cursor-pointer border-b border-slate-100 dark:border-slate-800 p-3 transition hover:bg-slate-50 dark:hover:bg-slate-800 ${
-                    !notif.read ? 'bg-gemini-blue/5 dark:bg-gemini-blue/10' : ''
+                  className={`cursor-pointer border-b border-gray-100 p-3 transition hover:bg-gray-50 ${
+                    !notif.read ? 'bg-blue-50' : ''
                   }`}
                 >
                   <div className="flex items-start gap-2">
-                    <div className="flex-shrink-0 text-slate-600 dark:text-slate-400">
+                    <div className="flex-shrink-0 text-gray-600">
                       {getNotificationIcon(notif.type)}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{notif.title}</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-400">{notif.message}</p>
-                      <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                      <p className="text-sm font-semibold text-gray-900">{notif.title}</p>
+                      <p className="text-xs text-gray-600">{notif.message}</p>
+                      <p className="mt-1 text-xs text-gray-400">
                         {notif.createdAt?.toDate
                           ? new Date(notif.createdAt.toDate()).toLocaleString('vi-VN')
                           : 'Vừa xong'}
                       </p>
                     </div>
                     {!notif.read && (
-                      <span className="h-2 w-2 rounded-full bg-gemini-blue"></span>
+                      <span className="h-2 w-2 rounded-full bg-blue-600"></span>
                     )}
                   </div>
                 </div>

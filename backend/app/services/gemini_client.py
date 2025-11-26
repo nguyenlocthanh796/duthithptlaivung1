@@ -94,22 +94,38 @@ class GeminiClient:
                 client = genai.Client(api_key=api_key)
                 
                 # Build parts list - include image if provided
-                parts = [types.Part.from_text(text=prompt)]
+                # Nếu có hình ảnh, đặt hình ảnh TRƯỚC text để Gemini ưu tiên phân tích hình ảnh
+                parts = []
                 if image_url:
                     try:
                         # Try to use from_uri for public URLs (Firebase Storage, etc.)
                         # Note: Gemini API may require specific URL format or authentication
                         # If from_uri fails, we'll include URL in text prompt as fallback
                         try:
-                            parts.append(types.Part.from_uri(uri=image_url, mime_type="image/jpeg"))
-                            logger.info(f"Including image in prompt via from_uri: {image_url}")
+                            # Đặt hình ảnh TRƯỚC text để Gemini ưu tiên đọc hình ảnh
+                            # Detect MIME type from URL or default to image/jpeg
+                            mime_type = "image/jpeg"
+                            if image_url.lower().endswith('.png'):
+                                mime_type = "image/png"
+                            elif image_url.lower().endswith('.webp'):
+                                mime_type = "image/webp"
+                            elif image_url.lower().endswith('.gif'):
+                                mime_type = "image/gif"
+                            
+                            parts.append(types.Part.from_uri(uri=image_url, mime_type=mime_type))
+                            parts.append(types.Part.from_text(text=prompt))
+                            logger.info(f"Including image in prompt via from_uri (priority): {image_url}, mime_type: {mime_type}")
                         except (AttributeError, TypeError, ValueError) as uri_error:
                             # from_uri might not be available or URL format incorrect
                             # Fallback: include image URL in text prompt
                             logger.warning(f"from_uri failed for {image_url}: {uri_error}, adding URL to text prompt")
-                            parts[0] = types.Part.from_text(text=f"{prompt}\n\n[Hình ảnh đính kèm: {image_url}]")
+                            parts.append(types.Part.from_text(text=f"{prompt}\n\n[Hình ảnh đính kèm: {image_url}]"))
                     except Exception as img_error:
                         logger.warning(f"Failed to include image {image_url}: {img_error}, continuing with text only")
+                        parts.append(types.Part.from_text(text=prompt))
+                else:
+                    # Không có hình ảnh, chỉ dùng text
+                    parts.append(types.Part.from_text(text=prompt))
                 
                 contents = [
                     types.Content(
