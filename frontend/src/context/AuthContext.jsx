@@ -15,9 +15,45 @@ export function AuthProvider({ children }) {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          await upsertUserProfile(firebaseUser)
-          const profile = await getDoc(doc(db, 'users', firebaseUser.uid))
-          const profileData = profile.data() || {}
+          // Try to update user profile, but don't fail if blocked
+          try {
+            await upsertUserProfile(firebaseUser)
+          } catch (profileError) {
+            // Log but don't block authentication - upsertUserProfile should not throw for blocked requests
+            const errorMessage = profileError?.message || ''
+            const errorCode = profileError?.code || ''
+            if (!errorMessage.includes('ERR_BLOCKED_BY_CLIENT') && 
+                !errorMessage.includes('blocked') &&
+                errorCode !== 'unavailable') {
+              console.error('Unexpected error updating user profile:', profileError)
+            } else {
+              console.warn('User profile update skipped (blocked by ad blocker or network issue)')
+            }
+          }
+          
+          // Try to get user profile, but use defaults if blocked
+          let profileData = {}
+          try {
+            const profile = await getDoc(doc(db, 'users', firebaseUser.uid))
+            if (profile.exists()) {
+              profileData = profile.data() || {}
+            }
+          } catch (profileError) {
+            // Handle ERR_BLOCKED_BY_CLIENT and network errors gracefully
+            const errorMessage = profileError?.message || ''
+            const errorCode = profileError?.code || ''
+            if (errorMessage.includes('ERR_BLOCKED_BY_CLIENT') || 
+                errorMessage.includes('blocked') ||
+                errorMessage.includes('network') ||
+                errorCode === 'unavailable') {
+              console.warn('User profile fetch skipped (blocked by ad blocker or network issue)')
+            } else {
+              console.warn('Could not fetch user profile:', profileError)
+            }
+            // Continue with empty profile data
+            profileData = {}
+          }
+          
           setUser({
             uid: firebaseUser.uid,
             displayName: firebaseUser.displayName,
@@ -36,6 +72,11 @@ export function AuthProvider({ children }) {
         } else {
           setUser(null)
         }
+      } catch (error) {
+        // Catch any unexpected errors in the auth flow
+        console.error('Unexpected error in auth state change:', error)
+        // Still set loading to false to prevent infinite loading
+        setLoading(false)
       } finally {
         setLoading(false)
       }

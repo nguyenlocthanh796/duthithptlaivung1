@@ -37,20 +37,49 @@ function normalizeArray(value) {
 }
 
 export const upsertUserProfile = async (user) => {
-  const userDoc = doc(usersCollection, user.uid)
-  // Include uid field to satisfy Firestore rules (required for create)
-  await setDoc(
-    userDoc,
-    {
-      uid: user.uid, // Required by Firestore rules for create operation
-      displayName: user.displayName,
-      email: user.email,
-      photoURL: user.photoURL,
-      lastLogin: serverTimestamp(),
-      roles: arrayUnion('student'),
-    },
-    { merge: true }
-  )
+  try {
+    const userDoc = doc(usersCollection, user.uid)
+    // Include uid field to satisfy Firestore rules (required for create)
+    await setDoc(
+      userDoc,
+      {
+        uid: user.uid, // Required by Firestore rules for create operation
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL,
+        lastLogin: serverTimestamp(),
+        roles: arrayUnion('student'),
+      },
+      { merge: true }
+    )
+  } catch (error) {
+    // Handle ERR_BLOCKED_BY_CLIENT (ad blocker) and network errors gracefully
+    const errorMessage = error?.message || ''
+    const errorCode = error?.code || ''
+    const errorName = error?.name || ''
+    
+    // Check for various forms of blocking/network errors
+    if (errorMessage.includes('ERR_BLOCKED_BY_CLIENT') || 
+        errorMessage.includes('blocked') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('Failed to fetch') ||
+        errorCode === 'unavailable' ||
+        errorCode === 'cancelled' ||
+        errorCode === 'deadline-exceeded' ||
+        errorName === 'NetworkError' ||
+        errorName === 'AbortError') {
+      console.warn('Firestore request blocked or failed (likely by ad blocker or network issue). User profile update skipped.', {
+        message: errorMessage,
+        code: errorCode,
+        name: errorName
+      })
+      // Don't throw - allow app to continue functioning
+      return
+    }
+    // Re-throw other errors (only critical ones)
+    console.error('Error updating user profile:', error)
+    throw error
+  }
 }
 
 // Optimized for Firebase free tier - limit reads

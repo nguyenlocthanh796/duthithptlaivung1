@@ -258,10 +258,13 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
     </div>
   )
 
+  // Kiểm tra xem có phải trang /chat không
+  const isChatPage = location.pathname === '/chat'
+  
   return (
     <div className="flex h-screen overflow-hidden relative w-full">
-      {/* Mobile Overlay */}
-      {sidebarOpen && (
+      {/* Mobile/Tablet Overlay - Chỉ hiển thị khi không phải trang /chat */}
+      {!isChatPage && sidebarOpen && (isMobile || (!isDesktop && !isXlScreen)) && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 z-40"
           onClick={() => setSidebarOpen(false)}
@@ -271,18 +274,20 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
 
       {/* Sidebar - Cột 1 (Điều hướng) - Tối ưu hóa */}
       {/* Ẩn cột 1 trên web khi ở trang /chat */}
-      {!(location.pathname === '/chat' && !isMobile) && (
+      {!(isChatPage && !isMobile) && (
         <aside
           ref={leftSidebarContainerRef}
           className={`${
-            sidebarOpen 
-              ? 'translate-x-0' 
-              : '-translate-x-full lg:translate-x-0'
+            // Mobile/Tablet: Luôn là overlay (fixed), chỉ translate
+            // Desktop: Relative, có thể ẩn bằng width
+            isMobile || (!isDesktop && !isXlScreen)
+              ? `fixed top-0 left-0 z-50 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+              : `relative ${sidebarOpen ? 'translate-x-0' : 'translate-x-0'}`
           } ${
             sidebarOpen 
-              ? isMobile ? 'w-64' : 'w-56' // Mobile: 256px (full), Desktop: 224px
-              : 'w-0 lg:w-56'
-          } fixed top-0 left-0 z-40 flex flex-col transition-all duration-300 border-r border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-950 flex-shrink-0 h-screen overflow-hidden`}
+              ? isMobile || (!isDesktop && !isXlScreen) ? 'w-64' : 'w-56' // Mobile/Tablet: 256px, Desktop: 224px
+              : isMobile || (!isDesktop && !isXlScreen) ? 'w-64' : 'w-0 lg:w-56' // Mobile/Tablet: giữ width khi đóng (để có thể slide), Desktop: co về 0
+          } flex flex-col transition-all duration-300 border-r border-slate-200/30 dark:border-slate-800/30 bg-white dark:bg-slate-950 flex-shrink-0 h-screen overflow-hidden`}
         style={{
           overflow: 'hidden',
           overscrollBehavior: 'none',
@@ -385,25 +390,36 @@ export function ThreeColumnLayout({ children, leftSidebar, rightSidebar }) {
         className="flex-1 overflow-hidden bg-slate-50 dark:bg-slate-950 flex-shrink min-w-0" 
         style={{ 
           paddingTop: '0px',
-          height: '100vh',
-          marginLeft: location.pathname === '/chat' && !isMobile 
+          height: '100%',
+          // Mobile/Tablet: Không có marginLeft (sidebar là overlay, không làm biến dạng)
+          // Desktop: Có marginLeft khi sidebar mở
+          // Trang /chat: Không có marginLeft
+          marginLeft: isChatPage && !isMobile 
             ? '0' 
-            : (isDesktop && sidebarOpen ? '224px' : (isMobile && sidebarOpen ? '256px' : '0')),
-          marginRight: location.pathname === '/chat' && !isMobile 
+            : (isMobile || (!isDesktop && !isXlScreen))
+              ? '0' // Mobile/Tablet: Không margin (sidebar là overlay)
+              : (isDesktop && sidebarOpen ? '224px' : '0'), // Desktop: Có margin khi sidebar mở
+          marginRight: isChatPage && !isMobile 
             ? '0' 
             : (isXlScreen && rightSidebarOpen ? '288px' : '0'),
           transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
         }}
       >
-        <div className={`w-full h-full box-border flex justify-center overflow-y-auto overflow-x-hidden scrollbar-hide ${
-          location.pathname === '/chat' ? 'px-0 py-0' : 'px-2 sm:px-3 md:px-4 py-3 md:py-4'
+        <div className={`w-full h-full box-border flex justify-center ${
+          location.pathname === '/chat' 
+            ? 'px-0 py-0 overflow-hidden' 
+            : 'px-2 sm:px-3 md:px-4 py-3 md:py-4 overflow-y-auto overflow-x-hidden scrollbar-hide'
         }`}>
           <style>{`
             .scrollbar-hide::-webkit-scrollbar {
               display: none;
             }
+            .scrollbar-hide {
+              -ms-overflow-style: none;
+              scrollbar-width: none;
+            }
           `}</style>
-          <div className={`w-full ${
+          <div className={`w-full h-full ${
             location.pathname === '/chat' ? 'max-w-full' : 'max-w-2xl'
           }`}>
             {children}

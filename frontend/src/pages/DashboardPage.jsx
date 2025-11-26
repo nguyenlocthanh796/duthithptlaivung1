@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, BarChart, Bar } from 'recharts'
 import { watchSubmissions } from '../services/firestore'
 import { ThreeColumnLayout } from '../components/ThreeColumnLayout'
+import { LineChartWrapper, BarChartWrapper } from '../components/Charts'
 
 export function DashboardPage() {
   const [submissions, setSubmissions] = useState([])
@@ -44,33 +44,11 @@ export function DashboardPage() {
         <div className="grid gap-6 md:grid-cols-2">
           <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded-lg p-6">
             <h2 className="text-xl font-semibold text-slate-900 mb-4">Điểm số gần đây</h2>
-            {chartData.length ? (
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={chartData}>
-                  <XAxis dataKey="name" hide />
-                  <YAxis domain={[0, 'dataMax']} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="score" stroke="#4285F4" strokeWidth={3} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="mt-8 text-center text-sm text-slate-500">Chưa có bài nộp nào.</p>
-            )}
+            <LineChartWrapper data={chartData} />
           </div>
           <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded-lg p-6">
             <h2 className="text-xl font-semibold text-slate-900 mb-4">Phân phối điểm</h2>
-            {chartData.length ? (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={chartData}>
-                  <XAxis dataKey="name" hide />
-                  <YAxis domain={[0, 'dataMax']} />
-                  <Tooltip />
-                  <Bar dataKey="score" fill="#34A853" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="mt-8 text-center text-sm text-slate-500">Chưa có dữ liệu thống kê.</p>
-            )}
+            <BarChartWrapper data={chartData} />
           </div>
         </div>
       </div>

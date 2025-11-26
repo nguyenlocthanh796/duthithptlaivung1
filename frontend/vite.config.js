@@ -72,7 +72,7 @@ export default defineConfig({
       output: {
         // Manual chunks để tách các thư viện lớn - tối ưu cho code splitting
         manualChunks: (id) => {
-          // React core
+          // React core - MUST be loaded first
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
             return 'react-vendor'
           }
@@ -104,10 +104,11 @@ export default defineConfig({
           if (id.includes('node_modules/katex') || id.includes('node_modules/react-katex')) {
             return 'math-vendor'
           }
-          // Charts
-          if (id.includes('node_modules/recharts')) {
-            return 'chart-vendor'
-          }
+          // Charts - DO NOT put in separate chunk - let it bundle with DashboardPage
+          // This ensures recharts only loads when DashboardPage is accessed
+          // if (id.includes('node_modules/recharts')) {
+          //   return 'chart-vendor'
+          // }
           // Day.js
           if (id.includes('node_modules/dayjs')) {
             return 'dayjs-vendor'

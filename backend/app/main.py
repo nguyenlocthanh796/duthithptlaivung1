@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import health, lm, files, questions, ai_tutor, teacher_documents
+from .routers import health, lm, files, questions, ai_tutor, teacher_documents, live
 
 # Optimize logging for production (e2-micro)
 logging.basicConfig(
@@ -60,6 +60,7 @@ app.include_router(ai_tutor.router, prefix="/ai", tags=["ai-tutor"])
 app.include_router(files.router, prefix="/files", tags=["files"])
 app.include_router(questions.router, prefix="/questions", tags=["questions"])
 app.include_router(teacher_documents.router, prefix="/teacher", tags=["teacher"])
+app.include_router(live.router)  # WebSocket endpoint for Gemini Live
 
 
 @app.get("/", tags=["root"])
