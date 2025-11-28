@@ -34,11 +34,15 @@
           if (fullText.includes('api.js') && 
               (fullText.includes('500') || fullText.includes('404') || fullText.includes('internal server error') || fullText.includes('not found'))) return true;
           if (fullText.includes('post') && (fullText.includes('localhost:8000') || fullText.includes('duthi-backend')) && 
-              (fullText.includes('500') || fullText.includes('404'))) return true;
+              (fullText.includes('500') || fullText.includes('404') || fullText.includes('internal server error'))) return true;
           if (fullText.includes('duthi-backend') && 
-              (fullText.includes('404') || fullText.includes('not found'))) return true;
+              (fullText.includes('404') || fullText.includes('not found') || fullText.includes('500') || fullText.includes('internal server error'))) return true;
           if (fullText.includes('aiChatService') && 
-              (fullText.includes('404') || fullText.includes('not found') || fullText.includes('http error'))) return true;
+              (fullText.includes('404') || fullText.includes('not found') || fullText.includes('http error') || fullText.includes('500'))) return true;
+          if (fullText.includes('duthi-backend-626004693464.us-central1.run.app') && 
+              (fullText.includes('500') || fullText.includes('internal server error'))) return true;
+          if (fullText.includes('/ai/chat') && 
+              (fullText.includes('500') || fullText.includes('internal server error'))) return true;
           
           // Firestore blocked
           if (fullText.includes('err_blocked_by_client') ||
@@ -60,9 +64,10 @@
         window.fetch = function(...args) {
           const url = args[0];
           return originalFetch.apply(this, args).catch(error => {
-            // Suppress 500 errors từ localhost:8000
-            if (typeof url === 'string' && url.includes('localhost:8000') && 
-                (error.message?.includes('500') || error.message?.includes('Internal Server Error'))) {
+            // Suppress 500 errors từ localhost:8000 và production backend
+            if (typeof url === 'string' && 
+                ((url.includes('localhost:8000') || url.includes('duthi-backend-626004693464.us-central1.run.app')) && 
+                 (error.message?.includes('500') || error.message?.includes('Internal Server Error')))) {
               // Silent fail - không rethrow
               return Promise.reject(error);
             }
