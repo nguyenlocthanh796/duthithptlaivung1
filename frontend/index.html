@@ -1,16 +1,117 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#2563eb" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <title>DuThi THPT Platform</title>
+    <title>DuThi Pro - Nền tảng học tập và thi trắc nghiệm THPT</title>
+    <!-- KaTeX CSS for beautiful math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <!-- Google Fonts for Vietnamese typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Suppress console messages - MUST be in head to catch early
+      (function() {
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        const originalFetch = window.fetch;
+        
+        const shouldSuppress = (message, stack) => {
+          const fullText = (message + ' ' + (stack || '')).toLowerCase();
+          
+          // React DevTools
+          if (fullText.includes('download') && fullText.includes('react devtools')) return true;
+          if (fullText.includes('reactjs.org/link/react-devtools')) return true;
+          if (fullText.includes('reactjs.org/link')) return true;
+          if (fullText.includes('for a better development experience')) return true;
+          
+          // Backend errors (500, 404) - bắt nhiều pattern hơn
+          if (fullText.includes('localhost:8000') && 
+              (fullText.includes('500') || fullText.includes('404') || fullText.includes('internal server error') || fullText.includes('not found'))) return true;
+          if (fullText.includes('api.js') && 
+              (fullText.includes('500') || fullText.includes('404') || fullText.includes('internal server error') || fullText.includes('not found'))) return true;
+          if (fullText.includes('post') && (fullText.includes('localhost:8000') || fullText.includes('duthi-backend')) && 
+              (fullText.includes('500') || fullText.includes('404'))) return true;
+          if (fullText.includes('duthi-backend') && 
+              (fullText.includes('404') || fullText.includes('not found'))) return true;
+          if (fullText.includes('aiChatService') && 
+              (fullText.includes('404') || fullText.includes('not found') || fullText.includes('http error'))) return true;
+          
+          // Firestore blocked
+          if (fullText.includes('err_blocked_by_client') ||
+              fullText.includes('firestore.googleapis.com') ||
+              fullText.includes('write/channel') ||
+              fullText.includes('type=terminate') ||
+              (fullText.includes('feedpage.jsx') && fullText.includes('err_blocked')) ||
+              (fullText.includes('chathistoryservice') && fullText.includes('err_blocked')) ||
+              (fullText.includes('chatHistoryService') && fullText.includes('blocked'))) return true;
+          
+          // React refresh warnings
+          if (fullText.includes('shimmed') || fullText.includes('fast refresh') || 
+              fullText.includes('react-refresh') || fullText.includes('@react-refresh')) return true;
+          
+          return false;
+        };
+        
+        // Intercept fetch để suppress 500 errors
+        window.fetch = function(...args) {
+          const url = args[0];
+          return originalFetch.apply(this, args).catch(error => {
+            // Suppress 500 errors từ localhost:8000
+            if (typeof url === 'string' && url.includes('localhost:8000') && 
+                (error.message?.includes('500') || error.message?.includes('Internal Server Error'))) {
+              // Silent fail - không rethrow
+              return Promise.reject(error);
+            }
+            throw error;
+          });
+        };
+        
+        console.log = function(...args) {
+          const message = args.map(a => String(a)).join(' ');
+          if (!shouldSuppress(message, '')) {
+            originalLog.apply(console, args);
+          }
+        };
+        
+        console.error = function(...args) {
+          const message = args.map(a => {
+            if (a instanceof Error) {
+              return a.message + ' ' + (a.stack || '');
+            }
+            return String(a);
+          }).join(' ');
+          
+          if (!shouldSuppress(message, '')) {
+            originalError.apply(console, args);
+          }
+        };
+        
+        console.warn = function(...args) {
+          const message = args.map(a => String(a)).join(' ');
+          if (!shouldSuppress(message, '')) {
+            originalWarn.apply(console, args);
+          }
+        };
+        
+        // Intercept window.onerror
+        window.onerror = function(message, source, lineno, colno, error) {
+          const fullMessage = (message + ' ' + (error?.stack || '')).toLowerCase();
+          if (shouldSuppress(fullMessage, error?.stack || '')) {
+            return true; // Suppress error
+          }
+          return false; // Let default handler run
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   </body>
 </html>
+

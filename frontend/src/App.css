@@ -1,7 +1,0 @@
-#root {
-  min-height: 100vh;
-  width: 100%;
-  overflow-x: hidden;
-  background: radial-gradient(circle at top, #f2f6ff 0%, #f7f7fb 45%, #f4f5f7 100%);
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-}

@@ -2,159 +2,177 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
+* {
   margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f9fafb; /* bg-gray-50 */
-  @apply dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen;
-  overflow-x: hidden;
+}
+
+#root {
   width: 100%;
-  /* Tăng font size toàn bộ dự án ~12-15% */
-  font-size: 18px; /* Tăng từ 16px (12.5% tăng) */
+  min-height: 100vh;
 }
 
-@media (min-width: 768px) {
-  body {
-    font-size: 19px; /* Tăng từ 17px (11.8% tăng) */
-  }
-}
-
-@media (min-width: 1024px) {
-  body {
-    font-size: 20px; /* Tăng từ 18px (11.1% tăng) */
-  }
-}
-
-* {
-  box-sizing: border-box;
-}
-
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Utility tùy chỉnh: Ẩn thanh cuộn (Scrollbar Hide) 
-   Dùng cho class 'scrollbar-hide' trong NewsFeed
-*/
-@layer utilities {
-  .scrollbar-hide {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
-  }
-  
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none; /* Chrome, Safari and Opera */
-  }
-}
-
-/* Tùy chỉnh thanh cuộn cho toàn trang 
-   Giúp thanh cuộn chính đẹp hơn, mảnh hơn
-*/
+/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.dark ::-webkit-scrollbar-track {
-  background: #0f172a; /* Darker for better contrast */
+  background: #f1f1f1;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1; /* gray-300 */
+  background: #888;
   border-radius: 4px;
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: #334155; /* Darker for better contrast */
-}
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8; /* gray-400 */
+  background: #555;
 }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+/* Typography cho tiếng Việt */
+body {
+  font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-feature-settings: 'liga' 1, 'kern' 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* KaTeX LaTeX Rendering Fixes */
-.katex {
-  font-size: 1.1em !important;
-  line-height: 1.5 !important;
+/* LaTeX content styling - Đẹp như sách giáo khoa */
+.latex-content {
+  word-wrap: break-word;
+  line-height: 1.8;
+  color: #1f2937;
+  font-size: 15px;
+  letter-spacing: 0.01em;
 }
 
-.katex-display {
-  margin: 1em 0 !important;
-  overflow-x: auto;
-  overflow-y: hidden;
+/* Text thường trong LaTeX content */
+.latex-content .latex-text {
+  line-height: 1.8;
+  word-spacing: 0.05em;
 }
 
-.katex-display > .katex {
+/* Inline math - công thức trong dòng */
+.latex-content .katex-inline {
   display: inline-block;
-  text-align: left;
-  white-space: nowrap;
-  max-width: 100%;
+  margin: 0 0.2em;
+  vertical-align: baseline;
+  font-size: 1.05em;
 }
 
-/* Prevent layout shift when LaTeX renders */
-.katex-html {
-  min-height: 1.2em;
+/* Display math - công thức riêng dòng (như sách giáo khoa) */
+.latex-content .katex-display-block {
+  margin: 1.2em 0;
+  padding: 0.8em 1em;
+  background: #f9fafb;
+  border-left: 3px solid #3b82f6;
+  border-radius: 4px;
+  overflow-x: auto;
+  text-align: center;
 }
 
-/* Fix LaTeX overflow on mobile */
+.latex-content .katex-display-block .katex {
+  font-size: 1.15em;
+  line-height: 1.6;
+}
+
+/* KaTeX styling improvements */
+.latex-content .katex {
+  font-family: 'KaTeX_Main', 'Times New Roman', serif;
+  font-size: 1.05em;
+}
+
+.latex-content .katex-display {
+  margin: 1.2em 0;
+  text-align: center;
+}
+
+/* Công thức hóa học - màu xanh */
+.latex-content .katex .mord {
+  color: #1e40af;
+}
+
+/* Số và biến - màu đen */
+.latex-content .katex .mord.mathnormal {
+  color: #111827;
+}
+
+/* Operators - màu xám đậm */
+.latex-content .katex .mop {
+  color: #374151;
+}
+
+/* Fractions - hiển thị đẹp hơn */
+.latex-content .katex .frac-line {
+  border-bottom-width: 0.08em;
+}
+
+/* Subscripts và superscripts */
+.latex-content .katex .msupsub {
+  font-size: 0.85em;
+}
+
+/* Cải thiện spacing cho công thức */
+.latex-content .katex-display-block + .latex-text,
+.latex-content .latex-text + .katex-display-block {
+  margin-top: 0.5em;
+}
+
+/* Responsive cho mobile */
 @media (max-width: 640px) {
-  .katex-display {
-    font-size: 0.9em;
+  .latex-content {
+    font-size: 14px;
   }
   
-  .katex {
-    font-size: 1em !important;
+  .latex-content .katex-display-block {
+    margin: 1em 0;
+    padding: 0.6em 0.8em;
+  }
+  
+  .latex-content .katex-display-block .katex {
+    font-size: 1em;
   }
 }
 
-/* Smooth transitions for content changes */
-.chat-message {
-  transition: min-height 0.2s ease-in-out;
-  contain: layout style paint;
+/* Hide scrollbar for specific elements */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-/* Prevent layout shift */
-.chat-message > div {
-  max-width: 100%;
-  overflow: hidden;
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
-/* Ensure message bubbles don't break layout */
-.chat-message .rounded-2xl {
-  max-width: 100%;
-  box-sizing: border-box;
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-  hyphens: auto;
+/* Custom scrollbar for comments */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
 }
 
-/* Prevent layout shift when expanding AI answer in feed */
-.post-solution-container {
-  contain: layout style;
-  will-change: max-height;
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
 }
 
-/* Ensure sidebars stay fixed when content expands */
-aside[class*="sidebar"],
-aside[class*="Sidebar"] {
-  contain: layout style;
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
 }
 
-/* Main content area - prevent affecting sidebars */
-main[class*="flex-1"] {
-  contain: layout;
-  min-width: 0;
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
+

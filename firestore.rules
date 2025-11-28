@@ -2,47 +2,82 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper function to check if user is authenticated
+    // ============================================
+    // HELPER FUNCTIONS (Optimized)
+    // ============================================
+    
+    // Check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Helper function to check if user is the owner
+    // Check if user is the owner
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Helper function to get user roles (safe - returns empty list if user doc doesn't exist)
+    // Get user document (optimized - single get call)
+    // Returns null if not authenticated or document doesn't exist
+    function getUserDoc() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             ? get(/databases/$(database)/documents/users/$(request.auth.uid))
+             : null;
+    }
+
+    // Get user roles (optimized - single get call, cached)
+    // Safe: returns empty list if user doc doesn't exist
     function getUserRoles() {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let userDoc = getUserDoc();
       return userDoc != null && userDoc.data.roles != null ? userDoc.data.roles : [];
     }
 
-    // Helper function to check if user has a specific role
+    // Check if user has a specific role (optimized)
     function hasRole(role) {
       return isAuthenticated() && role in getUserRoles();
     }
 
-    // Helper function to check if user is admin
+    // Check if user is admin (optimized - single role check)
     function isAdmin() {
       return hasRole('admin');
     }
 
-    // Helper function to check if user is teacher
+    // Check if user is teacher (optimized - check admin first, then teacher)
     function isTeacher() {
-      return hasRole('teacher') || hasRole('admin');
+      return hasRole('admin') || hasRole('teacher');
     }
 
-    // Helper function to check if user is moderator (admin, teacher, or moderator)
+    // Check if user is moderator (optimized - check admin first)
     function isModerator() {
       return hasRole('admin') || hasRole('teacher') || hasRole('moderator');
     }
+
+    // Check if user is author of a post/document (optimized - handles both formats)
+    function isAuthor(author, authorId) {
+      return isAuthenticated() && (
+        (author != null && author.uid == request.auth.uid) || 
+        (authorId != null && authorId == request.auth.uid)
+      );
+    }
+
+    // Check if author field is unchanged (optimized)
+    function isAuthorUnchanged() {
+      return (resource.data.author != null && request.resource.data.author != null && 
+              resource.data.author.uid == request.resource.data.author.uid) ||
+             (resource.data.authorId != null && request.resource.data.authorId != null &&
+              resource.data.authorId == request.resource.data.authorId);
+    }
+
+    // ============================================
+    // COLLECTIONS
+    // ============================================
 
     // Users collection
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow update: if isOwner(userId);
-      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && 
+        request.resource.data.uid == request.auth.uid &&
+        userId == request.auth.uid;
 
       match /savedPosts/{postId} {
         allow read, write: if isAuthenticated() && isOwner(userId);
@@ -51,81 +86,104 @@ service cloud.firestore {
 
     // Posts collection
     match /posts/{postId} {
-      allow read: if isAuthenticated() &&
-                    (!resource.data.isHidden ||
-                     (resource.data.author != null && resource.data.author.uid == request.auth.uid) ||
-                     resource.data.authorId == request.auth.uid ||
-                     isModerator());
+      // Read: authenticated users can read posts
+      // Note: Client-side code filters hidden posts for non-authors/non-moderators
+      allow read: if isAuthenticated();
 
-      allow create: if isAuthenticated() && (
-        (request.resource.data.author != null && request.resource.data.author.uid == request.auth.uid) ||
-        request.resource.data.authorId == request.auth.uid
-      ) && (
+      // Create: must be author and have required fields
+      allow create: if isAuthenticated() && 
+        isAuthor(request.resource.data.author, request.resource.data.authorId) &&
         request.resource.data.text is string &&
         request.resource.data.createdAt is timestamp &&
         request.resource.data.likes is list &&
-        request.resource.data.comments is list
-      );
+        request.resource.data.comments is list;
 
+      // Update: 
+      // - Any authenticated user can update mutable fields (likes, comments) if immutable fields unchanged
+      // - Author or moderator can update any fields (but author.uid cannot change)
       allow update: if isAuthenticated() && (
-        (resource.data.author != null && resource.data.author.uid == request.auth.uid) ||
-        resource.data.authorId == request.auth.uid ||
-        isModerator()
-      ) && (
-        (request.resource.data.author == resource.data.author) ||
-        request.resource.data.authorId == resource.data.authorId
+        // Allow mutable field updates (likes, comments) if author and immutable fields unchanged
+        (isAuthorUnchanged() &&
+         request.resource.data.text == resource.data.text &&
+         request.resource.data.createdAt == resource.data.createdAt) ||
+        // Or if user is author/moderator (author.uid still cannot change)
+        ((isAuthor(resource.data.author, resource.data.authorId) || isModerator()) &&
+         isAuthorUnchanged())
       );
 
+      // Delete: author or moderator
       allow delete: if isAuthenticated() && (
-        (resource.data.author != null && resource.data.author.uid == request.auth.uid) ||
-        resource.data.authorId == request.auth.uid ||
+        isAuthor(resource.data.author, resource.data.authorId) ||
         isModerator()
       );
     }
 
+    // Classes collection (Exam System)
+    match /classes/{classId} {
+      // Read: teacher or student of the class
+      allow read: if isAuthenticated() && (
+        resource.data.teacherId == request.auth.uid ||
+        request.auth.uid in resource.data.studentIds
+      );
+
+      // Create: authenticated user setting themselves as teacher
+      allow create: if isAuthenticated() && 
+        request.resource.data.teacherId == request.auth.uid &&
+        request.resource.data.studentIds is list;
+
+      // Update/Delete: only teacher of the class
+      allow update, delete: if isAuthenticated() && 
+        resource.data.teacherId == request.auth.uid;
+    }
+
     // Exams collection
     match /exams/{examId} {
-      allow read: if isAuthenticated();
+      // Helper: get class document (optimized - single get call)
+      function getClassDoc() {
+        return exists(/databases/$(database)/documents/classes/$(resource.data.classId))
+               ? get(/databases/$(database)/documents/classes/$(resource.data.classId))
+               : null;
+      }
 
-      allow create: if isAuthenticated() && isTeacher() && (
-        request.resource.data.createdBy == request.auth.uid ||
-        request.resource.data.authorId == request.auth.uid
-      );
+      // Helper: check if user is student in class (optimized)
+      function isStudentInClass() {
+        let classDoc = getClassDoc();
+        return classDoc != null && request.auth.uid in classDoc.data.studentIds;
+      }
 
-      allow update: if isAuthenticated() && (
+      // Read: creator OR (student in class AND exam is published)
+      allow read: if isAuthenticated() && (
         resource.data.createdBy == request.auth.uid ||
-        resource.data.authorId == request.auth.uid ||
-        isAdmin()
+        (isStudentInClass() && resource.data.status == "published")
       );
 
-      allow delete: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid ||
-        resource.data.authorId == request.auth.uid ||
-        isAdmin()
-      );
+      // Create: teacher creating exam
+      allow create: if isAuthenticated() && 
+        isTeacher() && 
+        request.resource.data.createdBy == request.auth.uid;
+
+      // Update/Delete: teacher who created the exam
+      allow update, delete: if isAuthenticated() && 
+        isTeacher() && 
+        resource.data.createdBy == request.auth.uid;
     }
 
     // Exam rooms collection
     match /examRooms/{roomId} {
       allow read: if isAuthenticated();
 
-      allow create: if isAuthenticated() && isTeacher() && (
-        request.resource.data.createdBy == request.auth.uid ||
-        request.resource.data.teacherId == request.auth.uid
-      ) && (
+      // Create: teacher with required fields
+      allow create: if isAuthenticated() && 
+        isTeacher() && 
+        (request.resource.data.createdBy == request.auth.uid ||
+         request.resource.data.teacherId == request.auth.uid) &&
         request.resource.data.title is string &&
         request.resource.data.password is string &&
         request.resource.data.startTime is timestamp &&
-        request.resource.data.endTime is timestamp
-      );
+        request.resource.data.endTime is timestamp;
 
-      allow update: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid ||
-        resource.data.teacherId == request.auth.uid ||
-        isAdmin()
-      );
-
-      allow delete: if isAuthenticated() && (
+      // Update/Delete: creator, teacher, or admin
+      allow update, delete: if isAuthenticated() && (
         resource.data.createdBy == request.auth.uid ||
         resource.data.teacherId == request.auth.uid ||
         isAdmin()
@@ -135,84 +193,251 @@ service cloud.firestore {
     // Submissions collection
     match /submissions/{submissionId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-                       request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
     }
 
     // Notifications collection
     match /notifications/{notificationId} {
+      // Read: owner or admin
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isAdmin()
       );
 
+      // Create: owner, admin, or teacher
       allow create: if isAuthenticated() && (
         request.resource.data.userId == request.auth.uid ||
         isAdmin() ||
         isTeacher()
       );
 
-      allow update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
-
-      allow delete: if isAuthenticated() && (
+      // Update/Delete: owner or admin
+      allow update, delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isAdmin()
       );
     }
 
-    // Chat History collection
-    match /chatHistory/{sessionId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-
-      allow create: if isAuthenticated() &&
-                       request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.messages is list &&
-                       request.resource.data.createdAt is timestamp;
-
-      allow update: if isAuthenticated() &&
-                       resource.data.userId == request.auth.uid &&
-                       request.resource.data.userId == resource.data.userId;
-
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
-    }
 
     // Documents collection
     match /documents/{documentId} {
-      // Allow all authenticated users to read documents
+      // Helper: check if user is uploader (optimized)
+      function isUploader(uploadedBy) {
+        return isAuthenticated() && 
+               uploadedBy != null && 
+               uploadedBy.uid == request.auth.uid;
+      }
+
+      // Read: all authenticated users
       allow read: if isAuthenticated();
 
-      // Allow authenticated users to create documents
-      allow create: if isAuthenticated() && (
-        (request.resource.data.uploadedBy != null && request.resource.data.uploadedBy.uid == request.auth.uid) ||
-        request.resource.data.uploadedBy.uid == request.auth.uid
-      ) && (
+      // Create: authenticated user with required fields
+      allow create: if isAuthenticated() && 
+        isUploader(request.resource.data.uploadedBy) &&
         request.resource.data.fileName is string &&
         request.resource.data.fileUrl is string &&
         request.resource.data.fileType is string &&
         request.resource.data.fileSize is int &&
         request.resource.data.createdAt is timestamp &&
-        request.resource.data.updatedAt is timestamp
-      );
+        request.resource.data.updatedAt is timestamp;
 
-      // Allow owner or admin to update documents
-      allow update: if isAuthenticated() && (
-        (resource.data.uploadedBy != null && resource.data.uploadedBy.uid == request.auth.uid) ||
-        resource.data.uploadedBy.uid == request.auth.uid ||
-        isAdmin()
-      );
-
-      // Allow owner or admin to delete documents
-      allow delete: if isAuthenticated() && (
-        (resource.data.uploadedBy != null && resource.data.uploadedBy.uid == request.auth.uid) ||
-        resource.data.uploadedBy.uid == request.auth.uid ||
+      // Update/Delete: uploader or admin
+      allow update, delete: if isAuthenticated() && (
+        isUploader(resource.data.uploadedBy) ||
         isAdmin()
       );
     }
+
+    // Artifacts collection (for Exam System)
+    match /artifacts/{appId} {
+      // Posts collection (Feed)
+      match /public/data/posts/{postId} {
+        // Read: authenticated users can read posts
+        allow read: if isAuthenticated();
+        
+        // Create: authenticated users can create posts
+        allow create: if isAuthenticated() &&
+          isAuthor(request.resource.data.author, request.resource.data.authorId) &&
+          request.resource.data.text is string &&
+          request.resource.data.createdAt is timestamp &&
+          request.resource.data.likes is list;
+        
+        // Update: author or moderator, or update likes array only
+        allow update: if isAuthenticated() && (
+          isAuthor(resource.data.author, resource.data.authorId) ||
+          isModerator() ||
+          // Allow updating likes array only (for like/unlike)
+          (request.resource.data.likes is list &&
+           request.resource.data.text == resource.data.text &&
+           request.resource.data.createdAt == resource.data.createdAt &&
+           isAuthorUnchanged())
+        );
+        
+        // Delete: author or moderator
+        allow delete: if isAuthenticated() && (
+          isAuthor(resource.data.author, resource.data.authorId) ||
+          isModerator()
+        );
+
+        // Comments subcollection
+        match /comments/{commentId} {
+          // Read: authenticated users can read comments
+          allow read: if isAuthenticated();
+          
+          // Create: authenticated users can create comments
+          // Check if author.uid matches current user
+          allow create: if isAuthenticated() &&
+            request.resource.data.author != null &&
+            request.resource.data.author.uid == request.auth.uid &&
+            request.resource.data.text is string &&
+            request.resource.data.createdAt is timestamp &&
+            request.resource.data.likes is list;
+          
+          // Update: 
+          // - Allow updating likes array by any authenticated user
+          // - Author or moderator can update other fields
+          allow update: if isAuthenticated() && (
+            // Allow updating likes array only (for like/unlike)
+            (request.resource.data.likes is list &&
+             request.resource.data.text == resource.data.text &&
+             request.resource.data.createdAt == resource.data.createdAt &&
+             request.resource.data.author == resource.data.author) ||
+            // Or if user is author/moderator (can update any field except author.uid)
+            ((resource.data.author != null && resource.data.author.uid == request.auth.uid) ||
+             isModerator())
+          );
+          
+          // Delete: author or moderator
+          allow delete: if isAuthenticated() && (
+            (resource.data.author != null && resource.data.author.uid == request.auth.uid) ||
+            isModerator()
+          );
+
+          // Replies subcollection (nested comments)
+          match /replies/{replyId} {
+            // Read: authenticated users can read replies
+            allow read: if isAuthenticated();
+            
+            // Create: authenticated users can create replies
+            allow create: if isAuthenticated() &&
+              request.resource.data.author != null &&
+              request.resource.data.author.uid == request.auth.uid &&
+              request.resource.data.text is string &&
+              request.resource.data.createdAt is timestamp &&
+              request.resource.data.likes is list;
+            
+            // Update:
+            // - Allow updating likes array by any authenticated user
+            // - Author or moderator can update other fields
+            allow update: if isAuthenticated() && (
+              // Allow updating likes array only
+              (request.resource.data.likes is list &&
+               request.resource.data.text == resource.data.text &&
+               request.resource.data.createdAt == resource.data.createdAt &&
+               request.resource.data.author == resource.data.author) ||
+              // Or if user is author/moderator
+              ((resource.data.author != null && resource.data.author.uid == request.auth.uid) ||
+               isModerator())
+            );
+            
+            // Delete: author or moderator
+            allow delete: if isAuthenticated() && (
+              (resource.data.author != null && resource.data.author.uid == request.auth.uid) ||
+              isModerator()
+            );
+          }
+        }
+      }
+
+      match /public/data/classes/{classId} {
+        // Helper: check if user is teacher of class (optimized)
+        function isClassTeacher() {
+          return isAuthenticated() && resource.data.teacherId == request.auth.uid;
+        }
+        
+        // Read: Allow authenticated users to read classes
+        // Note: Client-side code filters based on accessType and studentIds
+        allow read: if isAuthenticated();
+
+        // Create: authenticated users can create classes
+        allow create: if isAuthenticated() &&
+          request.resource.data.teacherId == request.auth.uid &&
+          request.resource.data.name is string;
+
+        // Update/Delete: only teacher
+        allow update, delete: if isAuthenticated() && isClassTeacher();
+
+        // Exams subcollection
+        match /exams/{examId} {
+          // Read: Allow authenticated users to read exams
+          // Client-side code ensures only accessible exams are shown
+          allow read: if isAuthenticated();
+
+          // Create: if user is teacher of parent class
+          allow create: if isAuthenticated() && isClassTeacher() &&
+            request.resource.data.title is string &&
+            request.resource.data.questions is list;
+
+          // Update/Delete: only teacher
+          allow update, delete: if isAuthenticated() && isClassTeacher();
+        }
+      }
+
+      // Submissions collection
+      match /public/data/submissions/{submissionId} {
+        // Helper: check if user is submission owner (optimized)
+        function isSubmissionOwner() {
+          return isAuthenticated() && resource.data.userId == request.auth.uid;
+        }
+
+        // Helper: check if user is teacher or admin (optimized)
+        function isTeacherOrAdmin() {
+          return isAuthenticated() && (isTeacher() || isAdmin());
+        }
+
+        // Read: owner, teacher, or admin
+        allow read: if isAuthenticated() && (
+          isSubmissionOwner() ||
+          isTeacherOrAdmin()
+        );
+
+        // Create: authenticated users can create their own submissions
+        allow create: if isAuthenticated() &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.examId is string;
+
+        // Update/Delete: only owner or admin
+        allow update, delete: if isAuthenticated() && (
+          isSubmissionOwner() ||
+          isAdmin()
+        );
+      }
+
+      // Chat History collection - nằm trong artifacts/{appId}/public/data/chatHistory/{sessionId}
+      match /public/data/chatHistory/{sessionId} {
+        // Read: authenticated users can read their own chat history
+        // Cho phép đọc ngay cả khi document chưa tồn tại (để tạo mới)
+        allow read: if isAuthenticated();
+
+        // Create: authenticated users can create their own chat history
+        allow create: if isAuthenticated() &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.messages is list &&
+          (request.resource.data.createdAt is timestamp || 
+           request.resource.data.updatedAt is timestamp);
+
+        // Update: only owner can update their own chat history
+        allow update: if isAuthenticated() &&
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == resource.data.userId;
+
+        // Delete: only owner can delete their own chat history
+        allow delete: if isAuthenticated() && 
+          resource.data.userId == request.auth.uid;
+      }
+    }
   }
 }
-

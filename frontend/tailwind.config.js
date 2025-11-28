@@ -4,24 +4,24 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class', // Enable dark mode with class strategy
   theme: {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "#4285F4", // Gemini Blue
-          light: "#5A9AFF",
-          dark: "#1A73E8",
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
         },
-        gemini: {
-          blue: "#4285F4",
-          green: "#34A853",
-          yellow: "#FBBC04",
-          red: "#EA4335",
-        },
-        accent: "#34A853", // Gemini Green
       },
     },
   },
   plugins: [],
 }
+

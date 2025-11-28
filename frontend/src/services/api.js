@@ -1,219 +1,249 @@
-import axios from 'axios'
+// API Service để kết nối với backend
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_PRODUCTION_URL = 'https://duthi-backend-626004693464.us-central1.run.app';
 
-const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-  timeout: 30000, // 30 seconds timeout
-  headers: {
-    'Content-Type': 'application/json',
+// Sử dụng production URL nếu không phải localhost
+const getApiUrl = () => {
+  if (import.meta.env.DEV) {
+    return API_BASE_URL;
+  }
+  return API_PRODUCTION_URL;
+};
+
+const apiUrl = getApiUrl();
+
+/**
+ * Generic API request function with fallback to production
+ */
+export const request = async (endpoint, options = {}, retryWithProduction = true) => {
+  let url = `${apiUrl}${endpoint}`;
+  
+  const config = {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  };
+
+  try {
+    const response = await fetch(url, config);
+    
+    if (!response.ok) {
+      // Silently try production backend for 500 errors from localhost
+      if (response.status === 500 && retryWithProduction && apiUrl === API_BASE_URL && apiUrl.includes('localhost')) {
+        try {
+          url = `${API_PRODUCTION_URL}${endpoint}`;
+          const prodResponse = await fetch(url, config);
+          if (prodResponse.ok) {
+            return await prodResponse.json();
+          }
+        } catch (prodError) {
+          // Silent fail - không log
+        }
+      }
+      // Don't throw for 500 errors - let geminiService handle fallback
+      if (response.status === 500) {
+        const error = await response.json().catch(() => ({ message: 'Internal Server Error' }));
+        const err = new Error(error.message || 'Internal Server Error');
+        // Mark as suppressed để không log
+        err.suppress = true;
+        throw err;
+      }
+      const error = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(error.message || `HTTP error! status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    // Nếu đang dùng localhost và lỗi, thử production backend
+    if (retryWithProduction && apiUrl === API_BASE_URL && apiUrl.includes('localhost') && 
+        (error.message?.includes('500') || error.message?.includes('Internal Server Error'))) {
+      try {
+        url = `${API_PRODUCTION_URL}${endpoint}`;
+        const prodResponse = await fetch(url, config);
+        if (prodResponse.ok) {
+          return await prodResponse.json();
+        }
+      } catch (prodError) {
+        // Silent fail - không log
+      }
+    }
+    // Nếu là lỗi 500, đánh dấu để suppress
+    if (error.message?.includes('500') || error.message?.includes('Internal Server Error')) {
+      error.suppress = true;
+    }
+    throw error;
+  }
+};
+
+/**
+ * Health check
+ */
+export const checkHealth = async () => {
+  return request('/health');
+};
+
+/**
+ * AI Services
+ */
+export const aiService = {
+  // Generate exam questions
+  generateExam: async (topic, count = 5, difficulty = 'TB') => {
+    return request('/api/generate-exam', {
+      method: 'POST',
+      body: JSON.stringify({
+        topic,
+        count,
+        difficulty, // 'De', 'TB', 'Kho', 'SieuKho'
+      }),
+    });
   },
-})
 
-// Request caching for GET requests (5 minutes) - optimized for connection speed
-const cache = new Map()
-const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
-const MAX_CACHE_SIZE = 50 // Limit cache size
-
-// Clean old cache entries periodically
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, value] of cache.entries()) {
-    if (now - value.timestamp > CACHE_DURATION) {
-      cache.delete(key)
+  // AI completion - sử dụng /ai/chat endpoint
+  complete: async (prompt, temperature = 0.7, maxTokens = 512) => {
+    const response = await request('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt,
+        temperature,
+        max_tokens: maxTokens,
+      }),
+    });
+    
+    // Backend có thể trả về nhiều format:
+    // - { answer: "..." } (từ PromptResponse)
+    // - { response: "..." }
+    // - { text: "..." }
+    // - { message: "..." }
+    // - { content: "..." }
+    // - Hoặc string trực tiếp
+    
+    // Nếu response đã là string, trả về luôn
+    if (typeof response === 'string') {
+      return { text: response, response: response };
     }
-  }
-  // If cache is still too large, remove oldest entries
-  if (cache.size > MAX_CACHE_SIZE) {
-    const entries = Array.from(cache.entries())
-    entries.sort((a, b) => a[1].timestamp - b[1].timestamp)
-    const toDelete = entries.slice(0, cache.size - MAX_CACHE_SIZE)
-    toDelete.forEach(([key]) => cache.delete(key))
-  }
-}, 60000) // Clean every minute
-
-// Request interceptor for caching
-apiClient.interceptors.request.use((config) => {
-  // Only cache GET requests
-  if (config.method === 'get' && !config.noCache) {
-    const cacheKey = `${config.url}${JSON.stringify(config.params || {})}`
-    const cached = cache.get(cacheKey)
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      // Return cached response immediately
-      return Promise.reject({
-        __cached: true,
-        data: cached.data,
-        config,
-      })
-    }
-  }
-  return config
-})
-
-// Response interceptor for caching
-apiClient.interceptors.response.use(
-  (response) => {
-    const config = response.config
-    if (config.method === 'get' && !config.noCache) {
-      const cacheKey = `${config.url}${JSON.stringify(config.params || {})}`
-      cache.set(cacheKey, {
-        data: response.data,
-        timestamp: Date.now(),
-      })
-    }
-    return response
+    
+    // Nếu là object, extract text (ưu tiên answer vì đó là format của PromptResponse)
+    const text = response.answer || response.response || response.text || response.message || response.content;
+    
+    return {
+      text: text || JSON.stringify(response),
+      response: text || JSON.stringify(response),
+      ...response
+    };
   },
-  (error) => {
-    // Handle cached responses
-    if (error.__cached) {
-      return Promise.resolve({ 
-        data: error.data,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: error.config,
-      })
+
+  // AI Tutor - explain wrong answer
+  tutorChat: async (message, context = '') => {
+    return request('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt: context ? `${context}\n\n${message}` : message,
+      }),
+    });
+  },
+
+  // Explain wrong answer
+  explainWrongAnswer: async (question, studentAnswer, correctAnswer, subject = 'Toán') => {
+    return request('/ai/explain-wrong-answer', {
+      method: 'POST',
+      body: JSON.stringify({
+        question,
+        studentAnswer,
+        correctAnswer,
+        subject,
+      }),
+    });
+  },
+};
+
+/**
+ * Questions Service
+ */
+export const questionsService = {
+  // Get questions
+  getQuestions: async (filters = {}) => {
+    const queryParams = new URLSearchParams(filters).toString();
+    return request(`/questions?${queryParams}`);
+  },
+
+  // Create question
+  createQuestion: async (questionData) => {
+    return request('/questions', {
+      method: 'POST',
+      body: JSON.stringify(questionData),
+    });
+  },
+};
+
+/**
+ * Files Service
+ */
+export const filesService = {
+  // Upload file
+  uploadFile: async (file, folder = '') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (folder) {
+      formData.append('folder', folder);
     }
-    return Promise.reject(error)
-  }
-)
 
-export const chatWithAI = async (prompt, options = {}) => {
-  const { temperature = 0.4, max_tokens = 512, model, imageUrl } = options
-  const payload = {
-    prompt,
-    temperature,
-    max_tokens,
-    model, // Support model selection
-  }
-  if (imageUrl) {
-    payload.imageUrl = imageUrl
-  }
-  const { data } = await apiClient.post('/ai/chat', payload)
-  return data
-}
+    const url = `${apiUrl}/files/upload`;
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
 
-export const generateIllustration = async (content) => {
-  try {
-    const { data } = await apiClient.post('/ai/generate-illustration', {
-      content,
-    })
-    return data
-  } catch (error) {
-    if (error.response) {
-      const errorMessage = error.response.data?.detail || error.response.data?.message || error.message
-      const errorWithDetail = new Error(errorMessage)
-      errorWithDetail.response = error.response
-      errorWithDetail.status = error.response.status
-      throw errorWithDetail
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`);
     }
-    throw error
-  }
-}
 
-export const processTeacherDocument = async (file) => {
-  const formData = new FormData()
-  formData.append('file', file)
-  try {
-    const { data } = await apiClient.post('/teacher/process-document', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-    return data
-  } catch (error) {
-    if (error.response) {
-      const errorMessage = error.response.data?.detail || error.response.data?.message || error.message
-      const errorWithDetail = new Error(errorMessage)
-      errorWithDetail.response = error.response
-      errorWithDetail.status = error.response.status
-      throw errorWithDetail
+    return await response.json();
+  },
+
+  // Get file URL
+  getFileUrl: async (fileId) => {
+    return request(`/files/${fileId}`);
+  },
+};
+
+/**
+ * Teacher Documents Service
+ */
+export const teacherDocumentsService = {
+  // Get documents
+  getDocuments: async () => {
+    return request('/teacher/documents');
+  },
+
+  // Upload document
+  uploadDocument: async (file, metadata = {}) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    Object.keys(metadata).forEach(key => {
+      formData.append(key, metadata[key]);
+    });
+
+    const url = `${apiUrl}/teacher/documents/upload`;
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`);
     }
-    throw error
-  }
-}
 
-export const testAI = async () => {
-  const { data } = await apiClient.get('/ai/test')
-  return data
-}
+    return await response.json();
+  },
+};
 
-export const uploadMedia = async (file) => {
-  const formData = new FormData()
-  formData.append('file', file)
-  const { data } = await apiClient.post('/files/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
-  return data
-}
-
-export const cloneQuestion = async ({ question, correct_answer }) => {
-  try {
-  const { data } = await apiClient.post('/questions/clone', {
-    question,
-    correct_answer,
-  })
-  return data
-  } catch (error) {
-    // Log detailed error for debugging
-    if (error.response) {
-      // Server responded with error
-      console.error('Server error:', error.response.status, error.response.data)
-      throw error
-    } else if (error.request) {
-      // Request made but no response
-      console.error('No response from server:', error.request)
-      throw new Error('Không thể kết nối đến server. Vui lòng kiểm tra backend có đang chạy không.')
-    } else {
-      // Error setting up request
-      console.error('Request setup error:', error.message)
-      throw error
-    }
-  }
-}
-
-export const solveComment = async (commentText) => {
-  try {
-    const { data } = await apiClient.post('/ai/solve-comment', {
-      commentText,
-    })
-    return data
-  } catch (error) {
-    // Re-throw với thông tin đầy đủ để frontend có thể hiển thị
-    if (error.response) {
-      const errorMessage = error.response.data?.detail || error.response.data?.message || error.message
-      const errorWithDetail = new Error(errorMessage)
-      errorWithDetail.response = error.response
-      errorWithDetail.status = error.response.status
-      throw errorWithDetail
-    }
-    throw error
-  }
-}
-
-export const solvePost = async (postText, imageUrl = null) => {
-  try {
-    const { data } = await apiClient.post('/ai/solve-post', {
-      postText: postText || '',
-      imageUrl: imageUrl || null,
-    })
-    return data
-  } catch (error) {
-    // Re-throw với thông tin đầy đủ để frontend có thể hiển thị
-    if (error.response) {
-      // Server trả về response với status code
-      const errorMessage = error.response.data?.detail || error.response.data?.message || error.message
-      const errorWithDetail = new Error(errorMessage)
-      errorWithDetail.response = error.response
-      errorWithDetail.status = error.response.status
-      throw errorWithDetail
-    }
-    throw error
-  }
-}
-
-export const extractQuestionsFromFile = async (file) => {
-  const formData = new FormData()
-  formData.append('file', file)
-  const { data } = await apiClient.post('/files/extract-questions', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
-  return data
-}
+export default {
+  checkHealth,
+  aiService,
+  questionsService,
+  filesService,
+  teacherDocumentsService,
+};
 

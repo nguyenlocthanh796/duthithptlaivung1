@@ -1,393 +1,240 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { useAuth } from '../hooks/useAuth'
-import { useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { 
-  Image as ImageIcon, 
-  Send, 
-  Camera, 
-  Calculator
-} from 'lucide-react'
-import { getPosts, watchPosts, getUserRoles, getMorePosts, searchPosts } from '../services/firestore'
-import { createPost } from '../services/firestore'
-import { uploadImage, uploadDocument } from '../services/storageService'
-import { lazy, Suspense } from 'react'
-import { ThreeColumnLayout } from '../components/ThreeColumnLayout'
-import { RightSidebarContent } from '../components/RightSidebarContent'
+import React, { useState, useEffect } from 'react';
+import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { db, appId } from '../services/firebase';
+import { uploadMultipleImages } from '../services/storageService';
+import { Button } from '../components/ui';
+import { compressImage } from '../utils/helpers';
+import PostItem from '../components/features/PostItem';
+import { Image as ImageIcon, Send, Camera, X } from 'lucide-react';
 
-// Lazy load heavy components
-const PostList = lazy(() => import('../components/PostList').then(module => ({ default: module.PostList })))
-import { useToast } from '../components/Toast'
-import logger from '../utils/logger'
-import dayjs from 'dayjs'
-import relativeTime from 'dayjs/plugin/relativeTime'
+const FeedPage = ({ user, appId: propAppId }) => {
+  const [postText, setPostText] = useState('');
+  const [posts, setPosts] = useState([]);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const filters = ['Tất cả', 'Đại số 12', 'Hình học', 'Vật lý', 'Tiếng Anh'];
+  const [selectedFilter, setSelectedFilter] = useState('Tất cả');
+  
+  // Sử dụng appId từ props hoặc từ firebase service
+  const currentAppId = propAppId || appId;
 
-dayjs.extend(relativeTime)
-
-export function FeedPage() {
-  const { user } = useAuth()
-  const { success, error: showError } = useToast()
-  const queryClient = useQueryClient()
-  // rightSidebarOpen is managed by Navbar, not needed here
-  const [searchParams] = useSearchParams()
-  const [posts, setPosts] = useState([])
-  const [userRoles, setUserRoles] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [isSearching, setIsSearching] = useState(false)
-  const [searchFilters, setSearchFilters] = useState(null)
-  const [selectedFilter, setSelectedFilter] = useState('Tất cả')
-  const [postText, setPostText] = useState('')
-  const [imageFiles, setImageFiles] = useState([])
-  const [imagePreviews, setImagePreviews] = useState([])
-  const [documentFile, setDocumentFile] = useState(null)
-  const [posting, setPosting] = useState(false)
-  const observerRef = useRef(null)
-  const lastPostRef = useRef(null)
-
-  const filterTabs = ['Tất cả', 'Đại số 12', 'Hình học không gian', 'Vật lý hạt nhân', 'Tiếng Anh', 'Góc học tập']
-
-  // Load user roles
   useEffect(() => {
-    if (user?.uid) {
-      getUserRoles(user.uid).then(setUserRoles)
+    if (!user) {
+      return;
     }
-  }, [user?.uid])
-
-  // Handle search
-  const handleSearch = useCallback((filters) => {
-    setIsSearching(true)
-    setSearchFilters(filters)
-  }, [])
-
-  // Check URL params for search query
-  useEffect(() => {
-    const query = searchParams.get('q')
-    if (query) {
-      handleSearch({
-        query,
-        subject: searchParams.get('subject') || 'all',
-        type: searchParams.get('type') || 'all',
-        time: searchParams.get('time') || 'all',
-      })
+    
+    if (!db) {
+      return;
     }
-  }, [searchParams, handleSearch])
 
-  // Load posts using React Query for caching
-  const { 
-    data: queryPosts, 
-    isLoading: isLoadingPosts, 
-    isError: isErrorPosts,
-    error: postsError 
-  } = useQuery({
-    queryKey: ['posts'],
-    queryFn: () => getPosts(10), // Limit to 10 posts initially
-    enabled: !isSearching, // Only fetch when not searching
-    staleTime: 1000 * 60 * 5, // 5 minutes (uses default from QueryClient)
-  })
-
-  // Update posts state when query data changes
-  useEffect(() => {
-    if (queryPosts) {
-      setPosts(queryPosts)
-      if (queryPosts.length > 0) {
-        lastPostRef.current = queryPosts[queryPosts.length - 1]
+    const q = query(
+      collection(db, 'artifacts', currentAppId, 'public', 'data', 'posts'), 
+      orderBy('createdAt', 'desc'), 
+      limit(20)
+    );
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const loadedPosts = snapshot.docs.map(doc => {
+          const postData = doc.data();
+          // Filter out invalid blob URLs từ imageUrls
+          if (postData.imageUrls && Array.isArray(postData.imageUrls)) {
+            postData.imageUrls = postData.imageUrls.filter(url => {
+              // Giữ lại Firebase Storage URLs và valid URLs
+              // Loại bỏ blob URLs (chúng sẽ hết hạn sau reload)
+              if (!url || typeof url !== 'string') return false;
+              // Giữ Firebase Storage URLs, HTTP/HTTPS URLs
+              if (url.startsWith('https://') || url.startsWith('http://')) return true;
+              // Loại bỏ blob URLs
+              if (url.startsWith('blob:')) return false;
+              return true;
+            });
+          }
+          return { id: doc.id, ...postData };
+        });
+        setPosts(loadedPosts);
+      }, 
+      (error) => {
+        // Error loading posts
       }
-      setHasMore(queryPosts.length >= 10) // Assume more if we got 10 posts
-    }
-  }, [queryPosts])
+    );
+    return () => unsubscribe();
+  }, [currentAppId, user, db]);
 
-  // Handle search (keep existing search logic)
-  useEffect(() => {
-    if (isSearching && searchFilters) {
-      setLoading(true)
-      searchPosts(searchFilters).then((results) => {
-        setPosts(results)
-        setHasMore(false)
-        setLoading(false)
-      }).catch((error) => {
-        logger.error('Search error:', error)
-        setLoading(false)
-      })
-    }
-  }, [isSearching, searchFilters])
+  const handleImageSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
-  // Update loading state based on query
-  useEffect(() => {
-    if (!isSearching) {
-      setLoading(isLoadingPosts)
-    }
-  }, [isLoadingPosts, isSearching])
-
-  // Handle error state
-  useEffect(() => {
-    if (isErrorPosts && postsError) {
-      logger.error('Error loading posts:', postsError)
-    }
-  }, [isErrorPosts, postsError])
-
-  // Handle image selection
-  const handleImageSelect = (e, isCamera = false) => {
-    const files = Array.from(e.target.files || [])
-    if (files.length === 0) return
-
-    // Limit to 5 images total
-    const remainingSlots = 5 - imageFiles.length
-    if (remainingSlots <= 0) {
-      showError('Chỉ có thể đính kèm tối đa 5 ảnh')
-      return
-    }
-
-    const selectedFiles = files.slice(0, remainingSlots)
-    const newFiles = [...imageFiles, ...selectedFiles]
-    setImageFiles(newFiles)
-
-    // Create previews
-    const newPreviews = selectedFiles.map(file => URL.createObjectURL(file))
-    setImagePreviews([...imagePreviews, ...newPreviews])
-
-    // Reset input
-    e.target.value = ''
-  }
-
-  // Remove image
-  const handleRemoveImage = (index) => {
-    const newFiles = imageFiles.filter((_, i) => i !== index)
-    const newPreviews = imagePreviews.filter((_, i) => i !== index)
+    setIsUploading(true);
     
-    // Revoke object URL to free memory
-    URL.revokeObjectURL(imagePreviews[index])
-    
-    setImageFiles(newFiles)
-    setImagePreviews(newPreviews)
-  }
-
-  // Handle post submission
-  const handlePostSubmit = async (e) => {
-    e.preventDefault()
-    if (!postText.trim() && imageFiles.length === 0 && !documentFile) {
-      showError('Vui lòng nhập nội dung hoặc đính kèm file')
-      return
-    }
-    
-    setPosting(true)
     try {
-      let imageUrls = []
-      let documentUrl = null
-      let documentType = null
+      // Nén tất cả ảnh
+      const compressedFiles = await Promise.all(
+        files.map(file => compressImage(file, 1920, 1920, 0.85, 1))
+      );
+      
+      // Tạo preview từ file đã nén
+      const newPreviews = compressedFiles.map(file => URL.createObjectURL(file));
+      setImagePreviews(prev => [...prev, ...newPreviews]);
+      setImageFiles(prev => [...prev, ...compressedFiles]);
+    } catch (error) {
+      // Fallback: sử dụng file gốc nếu nén thất bại
+      const newPreviews = files.map(file => URL.createObjectURL(file));
+      setImagePreviews(prev => [...prev, ...newPreviews]);
+      setImageFiles(prev => [...prev, ...files]);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
-      // Upload multiple images
+  const handlePostSubmit = async () => {
+    if (!postText.trim() && !imagePreviews.length) return;
+    if (!user) {
+      return;
+    }
+    
+    if (!db) {
+      alert('Lỗi: Firebase chưa được khởi tạo');
+      return;
+    }
+    
+    setIsUploading(true);
+    
+    try {
+      // Upload ảnh lên Firebase Storage trước
+      let imageUrls = [];
       if (imageFiles.length > 0) {
-        imageUrls = await Promise.all(
-          imageFiles.map(file => uploadImage(file))
-        )
+        try {
+          imageUrls = await uploadMultipleImages(imageFiles, user.uid, currentAppId);
+        } catch (uploadError) {
+          // Vẫn tạo post nhưng không có ảnh
+          alert('Lỗi khi upload ảnh. Bài viết sẽ được đăng không có ảnh.');
+        }
       }
-
-      if (documentFile) {
-        documentUrl = await uploadDocument(documentFile)
-        documentType = documentFile.type || (documentFile.name.endsWith('.pdf') ? 'application/pdf' : 'application/msword')
-      }
-
-      await createPost({
+      
+      // Revoke blob URLs để giải phóng memory
+      imagePreviews.forEach(url => URL.revokeObjectURL(url));
+      
+      const postData = {
         text: postText,
-        imageUrl: imageUrls.length > 0 ? imageUrls[0] : null, // Backward compatible
-        imageUrls: imageUrls.length > 0 ? imageUrls : null, // New field for multiple images
-        documentUrl,
-        documentType,
-        author: {
-          uid: user.uid,
-          displayName: user.displayName || user.email,
-          photoURL: user.photoURL,
+        imageUrls: imageUrls, // URLs từ Firebase Storage
+        author: { 
+          uid: user.uid, 
+          displayName: user.displayName || user.email || 'User',
+          photoURL: user.photoURL
         },
-      })
-
-      // Invalidate posts cache to refetch with new post
-      queryClient.invalidateQueries({ queryKey: ['posts'] })
-
-      success('Đăng bài thành công!')
-      setPostText('')
-      setImageFiles([])
-      // Clean up preview URLs
-      imagePreviews.forEach(url => URL.revokeObjectURL(url))
-      setImagePreviews([])
-      setDocumentFile(null)
-    } catch (error) {
-      logger.error('Error creating post:', error)
-      showError('Không thể đăng bài. Vui lòng thử lại.')
+        createdAt: serverTimestamp(),
+        subject: selectedFilter === 'Tất cả' ? 'Chung' : selectedFilter,
+        likes: [] // Mảng UIDs của người đã like
+      };
+      
+      await addDoc(collection(db, 'artifacts', currentAppId, 'public', 'data', 'posts'), postData);
+      
+      setPostText('');
+      setImagePreviews([]);
+      setImageFiles([]);
+    } catch(e) { 
+      alert("Lỗi đăng bài: " + e.message); 
     } finally {
-      setPosting(false)
+      setIsUploading(false);
     }
-  }
+  };
 
-  // Load more posts
-  const loadMore = useCallback(async () => {
-    if (loading || !hasMore || !lastPostRef.current) return
-    setLoading(true)
-    try {
-      const morePosts = await getMorePosts(lastPostRef.current)
-      if (morePosts.length === 0) {
-        setHasMore(false)
-      } else {
-        setPosts((prev) => [...prev, ...morePosts])
-        lastPostRef.current = morePosts[morePosts.length - 1]
-      }
-    } catch (error) {
-      logger.error('Error loading more posts:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [loading, hasMore])
-
-  const lastPostElementRef = useCallback((node) => {
-    if (loading) return
-    if (observerRef.current) observerRef.current.disconnect()
-    observerRef.current = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && hasMore) {
-        loadMore()
-      }
-    })
-    if (node) observerRef.current.observe(node)
-  }, [loading, hasMore, loadMore])
-
-  const displayPosts = useMemo(() => posts, [posts])
+  const removeImage = (index) => {
+    // Revoke object URL để giải phóng memory
+    URL.revokeObjectURL(imagePreviews[index]);
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   return (
-    <ThreeColumnLayout rightSidebar={<RightSidebarContent />}>
-      <div className="space-y-3 max-w-full">
-        {/* Composer - Tối ưu hóa */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2.5">
+    <div className="space-y-6">
+       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
           <div className="flex gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
-              {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
-            </div>
-            <div className="flex-1">
-              <form onSubmit={handlePostSubmit}>
+             <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold shrink-0">
+               {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+             </div>
+             <div className="flex-1">
                 <textarea 
-                  value={postText}
-                  onChange={(e) => setPostText(e.target.value)}
-                  placeholder="Bạn đang vướng mắc bài toán nào? (Gõ LaTeX hoặc chụp ảnh)..." 
-                  className="w-full resize-none outline-none text-gray-700 text-sm min-h-[45px] placeholder:text-gray-400 bg-transparent"
-                ></textarea>
-                
-                {/* Image Previews */}
+                  className="w-full resize-none border-none outline-none text-gray-700 text-sm min-h-[60px]" 
+                  placeholder="Bạn đang nghĩ gì?" 
+                  value={postText} 
+                  onChange={e=>setPostText(e.target.value)}
+                  disabled={isUploading}
+                />
                 {imagePreviews.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {imagePreviews.map((preview, index) => (
-                      <div key={index} className="relative">
-                        <img 
-                          src={preview} 
-                          alt={`Preview ${index + 1}`}
-                          className="w-20 h-20 object-cover rounded-lg border border-gray-200"
+                   <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
+                     {imagePreviews.map((url, i) => (
+                       <div key={i} className="relative w-20 h-20 shrink-0">
+                         <img src={url} className="w-full h-full object-cover rounded-lg" alt={`Preview ${i + 1}`} />
+                         <button 
+                           onClick={()=>removeImage(i)} 
+                           className="absolute top-0 right-0 bg-black/50 text-white rounded-full p-0.5 hover:bg-black/70 transition-colors"
+                           disabled={isUploading}
+                         >
+                           <X size={12}/>
+                         </button>
+                       </div>
+                     ))}
+                   </div>
+                )}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                   <div className="flex gap-1">
+                      <label className="p-2 text-gray-500 hover:bg-gray-100 rounded-full cursor-pointer transition-colors">
+                        <ImageIcon size={20}/>
+                        <input 
+                          type="file" 
+                          multiple 
+                          accept="image/*"
+                          className="hidden" 
+                          onChange={handleImageSelect}
+                          disabled={isUploading}
                         />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveImage(index)}
-                          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                {documentFile && (
-                  <div className="mt-2 text-sm text-gray-500">
-                    <span>📄 {documentFile.name}</span>
-                  </div>
-                )}
-                
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                  <div className="flex gap-1.5">
-                    <label className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 text-gray-600 rounded-lg hover:bg-blue-50 hover:text-blue-600 text-xs font-medium transition-colors cursor-pointer">
-                      <Camera size={16} />
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/gif"
-                        capture="environment"
-                        className="hidden"
-                        onChange={(e) => handleImageSelect(e, true)}
-                        disabled={posting || imageFiles.length >= 5}
-                      />
-                    </label>
-                    <label className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 text-gray-600 rounded-lg hover:bg-green-50 hover:text-green-600 text-xs font-medium transition-colors cursor-pointer">
-                      <ImageIcon size={16} />
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/gif"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => handleImageSelect(e, false)}
-                        disabled={posting || imageFiles.length >= 5}
-                      />
-                    </label>
-                    <label className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 text-gray-600 rounded-lg hover:bg-purple-50 hover:text-purple-600 text-xs font-medium transition-colors cursor-pointer">
-                      <Calculator size={16} />
-                      <input
-                        type="file"
-                        accept="application/pdf,.doc,.docx"
-                        className="hidden"
-                        onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
-                        disabled={posting}
-                      />
-                    </label>
-                  </div>
-                  <button 
-                    type="submit"
-                    disabled={posting || (!postText.trim() && imageFiles.length === 0 && !documentFile)}
-                    className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Đăng bài <Send size={14} />
-                  </button>
+                      </label>
+                      <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" disabled={isUploading}>
+                        <Camera size={20}/>
+                      </button>
+                   </div>
+                   <Button 
+                     size="sm" 
+                     onClick={handlePostSubmit}
+                     disabled={isUploading || (!postText.trim() && !imagePreviews.length)}
+                   >
+                     {isUploading ? 'Đang đăng...' : 'Đăng bài'} 
+                     {!isUploading && <Send size={14}/>}
+                   </Button>
                 </div>
-              </form>
-            </div>
+             </div>
           </div>
-        </div>
+       </div>
+       
+       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+         {filters.map(f => (
+           <button 
+             key={f} 
+             onClick={()=>setSelectedFilter(f)} 
+             className={`px-4 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors ${
+               selectedFilter===f ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+             }`}
+           >
+             {f}
+           </button>
+         ))}
+       </div>
+       
+       <div>
+         {posts.length === 0 ? (
+           <div className="text-center text-gray-400 py-8">
+             Chưa có bài viết nào. Hãy là người đầu tiên đăng bài!
+           </div>
+         ) : (
+           posts.map(post => (
+             <PostItem key={post.id} post={post} user={user} appId={currentAppId} />
+           ))
+         )}
+       </div>
+    </div>
+  );
+};
 
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
-          {filterTabs.map((tag, i) => (
-            <button 
-              key={i} 
-              onClick={() => setSelectedFilter(tag)}
-              className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap font-medium border transition-all ${
-                selectedFilter === tag 
-                  ? 'bg-gray-800 text-white border-gray-800 shadow-sm' 
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
-
-        {/* Error State */}
-        {isErrorPosts && !isSearching && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
-            <p className="text-red-600 text-sm">Không thể tải bài viết. Vui lòng thử lại sau.</p>
-            <button
-              onClick={() => queryClient.invalidateQueries({ queryKey: ['posts'] })}
-              className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
-            >
-              Thử lại
-            </button>
-          </div>
-        )}
-
-        {/* Feed Posts */}
-        <Suspense fallback={<div className="text-center py-8 text-gray-500">Đang tải...</div>}>
-          <PostList 
-            posts={displayPosts} 
-            userId={user?.uid} 
-            userRoles={userRoles} 
-            currentUser={user}
-            lastPostElementRef={isSearching ? null : lastPostElementRef}
-            loading={loading}
-            onSearch={handleSearch}
-          />
-        </Suspense>
-      </div>
-    </ThreeColumnLayout>
-  )
-}
+export default FeedPage;

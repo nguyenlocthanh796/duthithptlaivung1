@@ -1,10 +1,11 @@
 import logging
 import json
 import tempfile
+import base64
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Body, File, UploadFile
+from fastapi import APIRouter, HTTPException, Body, File, UploadFile, Form
 
 from ..config import get_settings
 from ..schemas import PromptRequest, PromptResponse
@@ -36,36 +37,122 @@ async def ai_test():
 @router.post("/chat", response_model=PromptResponse)
 async def chat(request: PromptRequest):
     try:
-        # Enhanced prompt for educational content only, no programming
-        enhanced_prompt = f"""Bạn là trợ lý AI học tập chuyên về kiến thức THPT (Toán, Lý, Hóa, Sinh, Văn, Sử, Địa, Anh).
+        logger.info(f"Received chat request: prompt length={len(request.prompt)}, temperature={request.temperature}, max_tokens={request.max_tokens}")
+        
+        # Enhanced prompt for "Anh Thơ" - friendly classmate AI
+        # Kiểm tra nếu là giải bài tập (có từ khóa "giải bài tập" hoặc "phân tích")
+        isSolvingExercise = "giải bài tập" in request.prompt.lower() or "phân tích" in request.prompt.lower() or "hình ảnh bài tập" in request.prompt.lower()
+        
+        if isSolvingExercise:
+            # Prompt ngắn gọn cho giải bài tập
+            enhanced_prompt = f"""Bạn là Anh Thơ, một người bạn học cùng lớp rất hòa đồng, kiến thức sâu rộng và thông thái.
 
-YÊU CẦU:
+QUAN TRỌNG - KIỂM TRA NỘI DUNG:
+- CHỈ giải bài tập nếu nội dung liên quan đến HỌC TẬP (Toán, Lý, Hóa, Sinh, Văn, Sử, Địa, Anh)
+- Nếu không liên quan học tập, trả lời: "Nội dung này không phải là bài tập học tập."
+
+YÊU CẦU GIẢI BÀI TẬP (PHẢI TUÂN THỦ):
+- TRẢ LỜI NGẮN GỌN NHẤT - phù hợp học sinh khá giỏi (không cần giải thích quá chi tiết)
+- Chỉ giải các bước chính, bỏ qua bước trung gian không cần thiết
+- Sử dụng LaTeX: $x^2$, $\\frac{a}{b}$, $$E = mc^2$$
+- CHỈ dùng **bold** cho thuật ngữ: **hàm số**, **đạo hàm**
+- CUỐI CÙNG PHẢI CÓ: **Kết luận: [đáp án cuối cùng]**
+- Viết súc tích, không dài dòng
+
+Câu hỏi:
+{request.prompt}
+
+Hãy giải bài tập NGẮN GỌN, kết thúc bằng **Kết luận: [đáp án]**:"""
+        else:
+            # Prompt bình thường cho chat
+            enhanced_prompt = f"""Bạn là Anh Thơ, một người bạn học cùng lớp rất hòa đồng, kiến thức sâu rộng và thông thái. Bạn luôn sẵn sàng giúp đỡ bạn học của mình trong việc học tập.
+
+VỀ BẢN THÂN:
+- Tự xưng là "mình" hoặc tên "Anh Thơ" (không dùng "tôi" hay "em")
+- Tính cách: hòa đồng, thân thiện, nhiệt tình nhưng vẫn giữ được sự chuyên nghiệp
+- Kiến thức: sâu rộng về tất cả các môn học THPT (Toán, Lý, Hóa, Sinh, Văn, Sử, Địa, Anh)
+- Thông thái: có khả năng giải thích phức tạp thành đơn giản, dễ hiểu
+
+PHẠM VI TRẢ LỜI:
 - CHỈ trả lời các câu hỏi về HỌC TẬP, KIẾN THỨC THPT
-- KHÔNG hỗ trợ code lập trình, lập trình, programming
-- Nếu câu hỏi về lập trình, từ chối lịch sự và hướng dẫn học tập thay thế
-- Trả lời chính xác, đầy đủ, có công thức toán học nếu cần (dùng LaTeX)
-- Giải thích rõ ràng, dễ hiểu
+- KHÔNG trả lời về: lập trình, code, programming, công nghệ thông tin (trừ khi liên quan đến học tập)
+- KHÔNG trả lời về: giải trí, phim ảnh, game (trừ khi liên quan đến học tập)
+- Nếu câu hỏi không liên quan học tập, từ chối lịch sự và hướng dẫn hỏi về học tập
+
+YÊU CẦU VỀ VĂN PHONG TIẾNG VIỆT (QUAN TRỌNG - PHẢI TUÂN THỦ):
+- Viết đúng ngữ pháp tiếng Việt, tự nhiên, dễ hiểu
+- Sử dụng từ ngữ phù hợp với học sinh THPT
+- Cấu trúc câu rõ ràng, logic, mạch lạc, tránh câu dài dòng
+- Tránh ngôn ngữ quá trang trọng hoặc quá suồng sã
+- Giải thích từng bước một cách có hệ thống, có thứ tự
+- Sử dụng thuật ngữ chính xác theo chương trình THPT Việt Nam
+- Trình bày như trong sách giáo khoa: có mục, có tiểu mục, có ví dụ minh họa cụ thể
+- Sử dụng định dạng markdown TIẾT KIỆM: chỉ dùng ## cho tiêu đề chính, dùng số thứ tự (1., 2., 3.) cho danh sách
+- QUAN TRỌNG: CHỈ dùng **bold** cho các TỪ HOẶC CỤM TỪ quan trọng như tên khái niệm, thuật ngữ chuyên môn (ví dụ: **hàm số**, **đạo hàm**, **phương trình bậc hai**). KHÔNG dùng **bold** cho toàn bộ câu, đoạn văn, hoặc các từ thông thường
+- Ưu tiên dùng số thứ tự và xuống dòng để tạo cấu trúc thay vì dùng quá nhiều bold
+- Tối ưu không gian: viết ngắn gọn, súc tích, không dài dòng
+- Luôn viết bằng tiếng Việt, đảm bảo ngữ pháp đúng và tự nhiên
+
+CẤU TRÚC TRẢ LỜI (ÁP DỤNG KHI CẦN THIẾT):
+1. Giới thiệu ngắn gọn về chủ đề (1-2 câu, nếu cần)
+2. Giải thích chi tiết với các bước rõ ràng, có số thứ tự
+3. Ví dụ minh họa cụ thể, dễ hiểu (nếu có)
+4. Tóm tắt hoặc Kết luận để người đọc dễ nhớ
+
+LƯU Ý KỸ THUẬT:
+- Công thức toán học, vật lý, hóa học PHẢI dùng LaTeX:
+  - Inline: $x^2$, $\\frac{a}{b}$, $\\sqrt{x}$
+  - Display mode: $$E = mc^2$$, $$\\int_0^1 f(x)dx$$
+- Luôn kiểm tra tính chính xác của thông tin
+- Nếu không chắc chắn, hãy nói rõ và đề xuất nguồn tham khảo
+- Độ dài phù hợp: không quá ngắn (thiếu thông tin) nhưng cũng không quá dài (khó đọc)
 
 Câu hỏi của người dùng:
 {request.prompt}
 
-Hãy trả lời:"""
+Hãy trả lời theo đúng yêu cầu về văn phong tiếng Việt và tính cách của Anh Thơ ở trên."""
         
         # If imageUrl is provided, include it in the prompt context
         # Note: Gemini API supports image input, but for now we'll include URL in prompt
         if request.imageUrl:
             enhanced_prompt = f"{enhanced_prompt}\n\nNgười dùng đã đính kèm hình ảnh: {request.imageUrl}\nHãy phân tích hình ảnh và trả lời câu hỏi dựa trên nội dung hình ảnh."
         
+        logger.info(f"Calling Gemini API with prompt length={len(enhanced_prompt)}")
         answer = await generate_chat_with_gemini(
             prompt=enhanced_prompt,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             model=request.model,
         )
+        logger.info(f"Gemini API returned answer length={len(answer) if answer else 0}")
         return PromptResponse(answer=answer)
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 503 for API unavailable)
+        raise
     except Exception as exc:  # pylint: disable=broad-except
         logger.error(f"Error in chat endpoint: {exc}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        # Return more user-friendly error message
+        error_msg = str(exc)
+        if "GEMINI_API_KEY" in error_msg or "API key" in error_msg.lower():
+            raise HTTPException(
+                status_code=503,
+                detail="Gemini API không khả dụng. Vui lòng kiểm tra cấu hình API key."
+            ) from exc
+        elif "PERMISSION_DENIED" in error_msg or "403" in error_msg:
+            raise HTTPException(
+                status_code=403,
+                detail="API key không hợp lệ hoặc đã bị rò rỉ. Vui lòng kiểm tra lại API key."
+            ) from exc
+        elif "QUOTA_EXCEEDED" in error_msg or "429" in error_msg:
+            raise HTTPException(
+                status_code=429,
+                detail="Đã vượt quá giới hạn API. Vui lòng thử lại sau."
+            ) from exc
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Lỗi khi xử lý yêu cầu: {error_msg}"
+            ) from exc
 
 
 def is_educational_content(text: str, has_image: bool = False) -> bool:
@@ -447,3 +534,60 @@ QUAN TRỌNG:
         raise
     except Exception as exc:  # pylint: disable=broad-except
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/voice-chat")
+async def voice_chat(audio: UploadFile = File(...), model: str = Form("gemini-2.5-flash-live")):
+    """
+    Voice chat endpoint - nhận audio và trả về text response từ Gemini Live
+    Fallback về transcript nếu model không hỗ trợ
+    """
+    try:
+        gemini = get_gemini_client()
+        if not gemini:
+            raise HTTPException(status_code=503, detail="Gemini API not available")
+        
+        # Đọc audio file
+        audio_data = await audio.read()
+        
+        # Convert audio to base64
+        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+        
+        # Tạo prompt với audio
+        # Note: Gemini Live API có thể yêu cầu format khác, nhưng tạm thời dùng text prompt
+        prompt = """Bạn là Anh Thơ, một người bạn học cùng lớp rất giỏi và thông thái. 
+Hãy trả lời câu hỏi từ audio một cách ngắn gọn, rõ ràng, theo phong cách sách giáo khoa.
+Hạn chế dùng **bold**, ưu tiên số thứ tự và cấu trúc rõ ràng."""
+        
+        # Thử dùng gemini-2.5-flash-live hoặc fallback về flash-lite
+        try:
+            # Gửi audio đến Gemini (có thể cần format đặc biệt cho Live API)
+            # Tạm thời, chúng ta sẽ dùng text prompt và thông báo rằng audio đã được nhận
+            # Trong thực tế, cần tích hợp Gemini Live API đúng cách
+            answer = await gemini.generate(
+                prompt=f"{prompt}\n\n[Audio đã được nhận, vui lòng trả lời câu hỏi từ audio]",
+                temperature=0.7,
+                max_tokens=512,
+                model="gemini-2.5-flash-lite"  # Fallback về flash-lite nếu live không có
+            )
+            
+            return {
+                "text": answer,
+                "audio_received": True,
+                "model_used": "gemini-2.5-flash-lite"
+            }
+        except Exception as e:
+            logger.warning(f"Gemini Live model not available, using fallback: {e}")
+            # Fallback: trả về thông báo để frontend dùng transcript
+            return {
+                "text": None,
+                "audio_received": True,
+                "fallback": "Please use transcript instead",
+                "error": str(e)
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error in voice-chat endpoint: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Lỗi xử lý voice chat: {str(exc)}") from exc

@@ -8,7 +8,8 @@
 
 ✅ **Frontend**: https://gen-lang-client-0581370080.web.app  
 ✅ **Backend**: https://duthi-backend-626004693464.us-central1.run.app  
-✅ **API Docs**: https://duthi-backend-626004693464.us-central1.run.app/docs
+✅ **API Docs**: https://duthi-backend-626004693464.us-central1.run.app/docs  
+✅ **AI Exam Generator API**: https://duthi-backend-626004693464.us-central1.run.app/api/generate-exam
 
 **Status:** 🟢 Online & Operational
 
@@ -231,10 +232,53 @@ ALLOWED_ORIGINS: "https://gen-lang-client-0581370080.web.app,..."
 
 ### Frontend Production (.env)
 ```env
+VITE_API_URL=https://duthi-backend-626004693464.us-central1.run.app
 VITE_API_BASE_URL=https://duthi-backend-626004693464.us-central1.run.app
 VITE_FIREBASE_API_KEY=your_key
 VITE_FIREBASE_PROJECT_ID=gen-lang-client-0581370080
 ```
+
+### AI Exam Generator API
+**Endpoint**: `POST /api/generate-exam`
+
+**Base URL**: 
+- Production: `https://duthi-backend-626004693464.us-central1.run.app`
+- Development: `http://localhost:8080`
+
+**Request Body**:
+```json
+{
+  "topic": "Lịch sử Việt Nam",
+  "difficulty": "TB",
+  "count": 10
+}
+```
+
+**Response**:
+```json
+{
+  "questions": [
+    {
+      "id": 1234567890,
+      "text": "Câu hỏi...",
+      "options": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
+      "correct": 0,
+      "type": "ai"
+    }
+  ]
+}
+```
+
+**Difficulty Levels**: 
+- `"De"` - Dễ
+- `"TB"` - Trung Bình  
+- `"Kho"` - Khó
+- `"SieuKho"` - Vận dụng cao
+
+**Usage in ExamSystemPage.jsx**:
+- Tự động detect production/development mode
+- Fallback to mock data nếu API fail
+- Integrated với Gemini AI backend
 
 ---
 

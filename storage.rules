@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function: check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function: check if user is the owner
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper function: check file type (images only)
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    // Helper function: check file size (max 10MB)
+    function isUnderMaxSize(maxSizeMB) {
+      return request.resource.size < maxSizeMB * 1024 * 1024;
+    }
+    
+    // Artifacts storage path: artifacts/{appId}/public/uploads/{userId}/{filename}
+    match /artifacts/{appId}/public/uploads/{userId}/{allPaths=**} {
+      // Read: authenticated users can read images
+      allow read: if isAuthenticated();
+      
+      // Write: only the owner can upload, must be image, max 10MB
+      allow write: if isAuthenticated() &&
+        isOwner(userId) &&
+        isImage() &&
+        isUnderMaxSize(10);
+      
+      // Delete: only the owner can delete
+      allow delete: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // Default: deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

@@ -27,4 +27,44 @@ class QuestionCloneResult(BaseModel):
     variants: List[str]
 
 
+class ExamGenerateRequest(BaseModel):
+    topic: str = Field(..., min_length=1, description="Chủ đề bài thi")
+    difficulty: str = Field("TB", description="Độ khó: De, TB, Kho, SieuKho")
+    count: int = Field(10, ge=1, le=50, description="Số lượng câu hỏi")
+
+
+class ExamQuestion(BaseModel):
+    text: str
+    options: List[str]
+    correct: int
+
+
+class ExamGenerateResponse(BaseModel):
+    questions: List[ExamQuestion]
+
+
+class ExamFullGenerateRequest(BaseModel):
+    topic: str = Field(..., min_length=1, description="Chủ đề bài thi")
+    difficulty: str = Field("Trung bình", description="Độ khó: Dễ, Trung bình, Khó")
+    quantity: int = Field(5, ge=1, le=50, description="Số lượng câu hỏi")
+    type: str = Field("multiple_choice", description="Loại câu hỏi: multiple_choice, essay, mix")
+
+
+class ExamFullGenerateResponse(BaseModel):
+    title: str
+    questions: List[dict]  # Flexible format for questions with explanation, points, etc.
+
+
+class QuestionCompleteRequest(BaseModel):
+    draftText: str = Field(..., min_length=1, description="Nội dung câu hỏi nháp")
+    type: str = Field("multiple_choice", description="Loại câu hỏi: multiple_choice, essay")
+
+
+class QuestionCompleteResponse(BaseModel):
+    text: str
+    options: Optional[List[str]] = None
+    correctIndex: Optional[int] = None
+    explanation: Optional[str] = None
+
+
 
