@@ -1,13 +1,14 @@
 """
 Post-related API endpoints
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime
 
 from app.sql_database import db
 from app.auth import get_current_user
+from app.routers.ai_analysis import run_post_analysis
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 
@@ -50,7 +51,12 @@ class ReactionRequest(BaseModel):
     reaction: Optional[str] = "like"
 
 
-ALLOWED_REACTIONS = ["like", "love", "care", "haha", "wow", "sad", "angry"]
+# Bộ reaction theo ngữ cảnh học tập
+# idea: 💡 hiểu bài / sáng tạo
+# thinking: 🤔 đang suy ngẫm / thắc mắc
+# resource: 📚 tài liệu hay
+# motivation: 🔥 cố lên / động viên
+ALLOWED_REACTIONS = ["idea", "thinking", "resource", "motivation"]
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
@@ -87,12 +93,60 @@ async def get_post(post_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _process_post_ai_moderation(post_id: str, post_data: Dict[str, Any]):
+    """Background task: gọi Gemini để phân tích bài và cập nhật metadata AI."""
+    try:
+        content = post_data.get("content")
+        image_url = post_data.get("image_url")
+        image_urls = [image_url] if image_url else []
+
+        result = run_post_analysis(content, image_urls)
+
+        # Chuẩn hóa một số field
+        is_educational = bool(result.get("is_educational", True))
+        moderation_status = result.get("moderation_status") or ("clean" if is_educational else "rejected")
+
+        metadata = result.get("metadata") or {}
+        subject = metadata.get("subject")
+        grade = metadata.get("grade")
+        topic = metadata.get("topic")
+        tags = metadata.get("tags") or []
+
+        # Chuẩn hóa subject đơn giản: bỏ dấu / viết thường (backend hiện tại lưu text thô)
+        if isinstance(subject, str):
+            subject_normalized = subject.strip()
+        else:
+            subject_normalized = None
+
+        updates: Dict[str, Any] = {
+            "isEducational": is_educational,
+            "status": moderation_status,
+            "subject": subject_normalized or post_data.get("subject"),
+            "grade": grade,
+            "topic": topic,
+            "aiTags": tags,
+            "aiModeration": result,
+            "updatedAt": datetime.now().isoformat(),
+        }
+
+        # Nếu có comment của Anh Thơ thì lưu kèm vào post (sau này UI hiển thị như comment đầu tiên)
+        anh_tho_comment = result.get("anh_tho_comment")
+        if anh_tho_comment:
+            updates["aiComment"] = anh_tho_comment
+
+        db.update("posts", post_id, updates)
+    except Exception as e:
+        # Không làm hỏng request chính; chỉ log
+        print(f"[AI_MODERATION_ERROR] post_id={post_id}: {e}")
+
+
 @router.post("/", response_model=Dict[str, Any])
 async def create_post(
     post: PostCreate,
+    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Create a new post"""
+    """Create a new post (AI phân tích chạy bất đồng bộ ở background)."""
     try:
         # Handle both camelCase and snake_case
         # Prefer data from authenticated user if not explicitly provided
@@ -106,7 +160,8 @@ async def create_post(
         author_email = post.author_email or post.authorEmail or current_user.get("email")
         author_role = post.author_role or post.authorRole or "student"
         has_question = post.has_question or post.hasQuestion or False
-        
+
+        now_iso = datetime.now().isoformat()
         post_data = {
             "content": post.content,
             "author_id": author_id,
@@ -120,10 +175,20 @@ async def create_post(
             "comments": 0,
             "shares": 0,
             "hasQuestion": has_question,
-            "createdAt": datetime.now().isoformat(),
-            "updatedAt": datetime.now().isoformat(),
+            # Fields phục vụ AI moderation
+            "status": "pending",
+            "isEducational": None,
+            "aiTags": [],
+            "aiModeration": None,
+            "aiComment": None,
+            "createdAt": now_iso,
+            "updatedAt": now_iso,
         }
-        post_id = db.create('posts', post_data)
+        post_id = db.create("posts", post_data)
+
+        # Trigger AI moderation ở background, không chặn request
+        background_tasks.add_task(_process_post_ai_moderation, post_id, post_data)
+
         return {"id": post_id, **post_data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -158,14 +223,14 @@ async def react_to_post(
     payload: ReactionRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """React to a post with Facebook-style reactions"""
+    """React to a post với bộ reaction học tập (idea, thinking, resource, motivation)."""
     # Default user_id from authenticated user if not provided
     if not payload.user_id:
         if not current_user.get("uid"):
             raise HTTPException(status_code=400, detail="user_id is required")
         payload.user_id = current_user["uid"]
 
-    reaction_type = payload.reaction or "like"
+    reaction_type = payload.reaction or "idea"
     if reaction_type not in ALLOWED_REACTIONS:
         raise HTTPException(status_code=400, detail="Invalid reaction type")
 
@@ -185,6 +250,7 @@ async def react_to_post(
             reaction_counts.setdefault(key, 0)
 
         previous_reaction = user_reactions.get(payload.user_id)
+        # likes giờ là tổng số reaction (để dùng nhanh cho UI)
         likes = data.get("likes", 0)
 
         # Remove reaction if selecting the same one
@@ -194,8 +260,7 @@ async def react_to_post(
                 0, reaction_counts.get(reaction_type, 0) - 1
             )
             user_reactions.pop(payload.user_id, None)
-            if reaction_type == "like":
-                likes = max(0, likes - 1)
+            likes = max(0, likes - 1)
             removed = True
             new_reaction = None
         else:
@@ -204,13 +269,11 @@ async def react_to_post(
                 reaction_counts[previous_reaction] = max(
                     0, reaction_counts.get(previous_reaction, 0) - 1
                 )
-                if previous_reaction == "like":
-                    likes = max(0, likes - 1)
+                likes = max(0, likes - 1)
 
             reaction_counts[reaction_type] = reaction_counts.get(reaction_type, 0) + 1
             user_reactions[payload.user_id] = reaction_type
-            if reaction_type == "like":
-                likes += 1
+            likes += 1
             new_reaction = reaction_type
 
         updates = {

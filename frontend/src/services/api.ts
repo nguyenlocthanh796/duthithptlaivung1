@@ -4,9 +4,12 @@
  */
 
 // Vite sử dụng import.meta.env thay vì process.env
-const API_BASE_URL = 
+// Chuẩn hóa để bỏ dấu "/" ở cuối nhằm tránh "//api" gây lỗi 404 trên một số proxy
+const RAW_API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   "http://35.223.145.48:8000";
+
+const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, "");
 
 // ==================== TYPES ====================
 
@@ -17,6 +20,8 @@ export interface Post {
   author_name: string;
   author_role: string;
   subject?: string;
+  grade?: number;
+  topic?: string;
   post_type: string;
   likes: number;
   comments: number;
@@ -25,6 +30,10 @@ export interface Post {
   updated_at: string;
   image_url?: string;
   hasQuestion?: boolean;
+  status?: string; // pending | clean | needs_review | rejected
+  isEducational?: boolean | null;
+  aiTags?: string[];
+  aiComment?: string | null;
   reactionCounts?: Record<string, number>;
   userReactions?: Record<string, string>;
 }
@@ -139,7 +148,7 @@ async function getHeaders(includeAuth = true): Promise<HeadersInit> {
 /**
  * Generic API request helper
  */
-async function apiRequest<T>(
+export async function apiRequest<T>(
   endpoint: string,
   options: {
     method?: string;
@@ -204,7 +213,7 @@ export const postsAPI = {
   
   async react(
     postId: string,
-    reaction: "like" | "love" | "care" | "haha" | "wow" | "sad" | "angry" = "like",
+    reaction: "idea" | "thinking" | "resource" | "motivation",
     userId?: string
   ): Promise<any> {
     return apiRequest(`/api/posts/${postId}/reaction`, {

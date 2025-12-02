@@ -1,17 +1,56 @@
 /**
  * Component tạo Post mới
  * Ví dụ cách sử dụng API với authentication
+ * ĐÃ TÍCH HỢP: Nén ảnh WebP trên trình duyệt trước khi upload
  */
-import React, { useState } from 'react';
+import React, { useState, ChangeEvent } from 'react';
+import imageCompression from 'browser-image-compression';
 import { postsAPI, PostCreate } from '../services/api';
 
 const CreatePost: React.FC = () => {
   const [content, setContent] = useState('');
   const [subject, setSubject] = useState('toan');
   const [postType, setPostType] = useState('text');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [imageInfo, setImageInfo] = useState<string | null>(null);
+
+  const handleImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setError(null);
+      setImageInfo('Đang nén ảnh...');
+
+      // Tuỳ chọn nén: Max width 1280px, chất lượng ~60%, đổi sang WebP
+      const options = {
+        maxWidthOrHeight: 1280,
+        initialQuality: 0.6,
+        fileType: 'image/webp',
+        useWebWorker: true,
+      } as const;
+
+      const compressed = await imageCompression(file, options);
+
+      setImageFile(compressed);
+      setPreviewUrl(URL.createObjectURL(compressed));
+
+      const originalKb = (file.size / 1024).toFixed(0);
+      const compressedKb = (compressed.size / 1024).toFixed(0);
+      setImageInfo(`Ảnh đã nén: ${originalKb}KB → ${compressedKb}KB (${compressed.type})`);
+      setPostType('image');
+    } catch (err: any) {
+      console.error('Error compressing image:', err);
+      setError('Không thể nén ảnh, vui lòng thử lại với file khác');
+      setImageFile(null);
+      setPreviewUrl(null);
+      setImageInfo(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,11 +65,20 @@ const CreatePost: React.FC = () => {
       setError(null);
       setSuccess(false);
 
+      // Nếu có ảnh, upload lên storage riêng hoặc encode base64 (tuỳ backend).
+      // Ở đây demo: convert sang base64 để gửi trong field image_url (phù hợp backend thử nghiệm).
+      let imageUrl: string | undefined;
+      if (imageFile) {
+        const base64 = await imageCompression.getDataUrlFromFile(imageFile);
+        imageUrl = base64;
+      }
+
       // Tạo post data
       const postData: PostCreate = {
         content: content.trim(),
         subject: subject,
         post_type: postType,
+        image_url: imageUrl,
         // author_id, author_name, author_email sẽ tự động lấy từ Firebase token
       };
 
@@ -41,6 +89,9 @@ const CreatePost: React.FC = () => {
       
       // Reset form
       setContent('');
+      setImageFile(null);
+      setPreviewUrl(null);
+      setImageInfo(null);
       setSuccess(true);
       
       // Có thể trigger reload danh sách posts ở component cha
@@ -114,6 +165,31 @@ const CreatePost: React.FC = () => {
             <option value="image">Hình ảnh</option>
             <option value="question">Câu hỏi</option>
           </select>
+        </div>
+
+        {/* Chọn ảnh (tự nén WebP trên browser trước khi upload) */}
+        <div style={{ marginBottom: '15px' }}>
+          <label>Ảnh minh họa (tùy chọn, sẽ được nén WebP): </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleImageChange}
+            disabled={loading}
+          />
+          {imageInfo && (
+            <div style={{ fontSize: '12px', color: '#555', marginTop: '4px' }}>
+              {imageInfo}
+            </div>
+          )}
+          {previewUrl && (
+            <div style={{ marginTop: '10px' }}>
+              <img
+                src={previewUrl}
+                alt="Xem trước"
+                style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', border: '1px solid #ddd' }}
+              />
+            </div>
+          )}
         </div>
 
         <button 

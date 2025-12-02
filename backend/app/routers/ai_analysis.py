@@ -7,6 +7,8 @@ from pydantic import BaseModel
 import os
 import requests
 import base64
+import json
+import re
 
 from app.config import settings
 
@@ -19,12 +21,21 @@ class AnalysisRequest(BaseModel):
     post_id: Optional[str] = None
 
 
-class AnalysisResponse(BaseModel):
+class PostMetadata(BaseModel):
     subject: Optional[str] = None  # Môn học
-    grade: Optional[str] = None  # Lớp
-    answer: Optional[str] = None  # Đáp án
-    conclusion: Optional[str] = None  # Kết luận
-    is_educational: bool = False  # Có liên quan học tập không
+    grade: Optional[int] = None  # Lớp
+    topic: Optional[str] = None  # Chủ đề
+    tags: Optional[List[str]] = None  # Tags do AI sinh ra
+
+
+class PostModerationResult(BaseModel):
+    is_educational: bool
+    moderation_status: str  # clean | needs_review | rejected
+    reason: Optional[str] = None
+    metadata: Optional[PostMetadata] = None
+    anh_tho_comment: Optional[str] = None
+    content_warning: Optional[str] = None
+    code_solution_refused: Optional[bool] = False
 
 
 class CommentItem(BaseModel):
@@ -68,133 +79,141 @@ def download_image_as_base64(image_url: str) -> Optional[str]:
         return None
 
 
-@router.post("/analyze", response_model=Dict[str, Any])
-async def analyze_post(request: AnalysisRequest):
-    """Analyze post content and images to extract educational information"""
+SYSTEM_INSTRUCTION_ANH_THO = """
+Bạn là AI phân loại nội dung cho mạng xã hội học tập \"EduSystem\".
+Đầu vào sẽ là văn bản và/hoặc hình ảnh từ bài đăng của học sinh THPT.
+
+Nhiệm vụ của bạn:
+1. Xác định xem nội dung có phải HỌC TẬP/NGHIÊN CỨU không.
+2. Trích xuất Môn học, Lớp (nếu đoán được), Chủ đề ngắn gọn và các thẻ (tags).
+3. Đóng vai \"Anh Thơ\" - một bạn học nữ thông minh, thân thiện để viết một câu bình luận ngắn gợi ý cách giải (tối đa 2 câu).
+
+QUY TẮC TUYỆT ĐỐI:
+- Nếu người dùng nhờ VIẾT CODE (Python, C/C++, Java, v.v.): KHÔNG được trả về code hoàn chỉnh.
+  Hãy chỉ giải thích thuật toán hoặc viết mã giả (pseudocode) ở dạng mô tả, không phải code thật.
+- Nếu nội dung đồi trụy, bạo lực, game thuần giải trí, chính trị, spam:
+  đặt is_educational = false và moderation_status = \"rejected\".
+
+- Khi cần hiển thị công thức Toán/Lý/Hóa trong anh_tho_comment, hãy dùng cú pháp LaTeX trong cặp `$...$` hoặc `$$...$$`
+  để front-end có thể render đẹp, ví dụ: `$x^2 + y^2 = 1$`, `$\int_0^1 x^2 dx$`, `\ce{H2 + O2 -> H2O}`, `F = ma`.
+
+ĐỊNH DẠNG OUTPUT BẮT BUỘC (JSON chuẩn, không giải thích thêm):
+{
+  \"is_educational\": true/false,
+  \"moderation_status\": \"clean\" | \"needs_review\" | \"rejected\",
+  \"reason\": \"Lý do nếu bị từ chối hoặc cần xem lại\" hoặc null,
+  \"metadata\": {
+    \"subject\": \"Toán học\" | \"Vật lý\" | ... hoặc null,
+    \"grade\": 10 | 11 | 12 hoặc null,
+    \"topic\": \"Chuỗi số\" hoặc null,
+    \"tags\": [\"#ToanHoc\", \"#Lop12\", \"#Logarit\"] hoặc []
+  },
+  \"anh_tho_comment\": \"Một câu bình luận gợi ý của Anh Thơ hoặc null\",
+  \"content_warning\": \"Cảnh báo nhẹ nếu có\" hoặc null,
+  \"code_solution_refused\": true/false
+}
+""".strip()
+
+
+def run_post_analysis(content: Optional[str], image_urls: Optional[List[str]]) -> Dict[str, Any]:
+    """Thực thi gọi Gemini để phân tích bài đăng, dùng lại cho cả API và background task."""
     api_key = get_gemini_api_key()
-    
     if not api_key:
         raise HTTPException(
             status_code=503,
             detail="Gemini API key not configured"
         )
-    
-    try:
-        model_name = settings.GEMINI_MODEL or "gemini-2.5-flash-lite"
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-        
-        # Build prompt
-        prompt = """Bạn là trợ lý AI chuyên phân tích nội dung học tập THPT. 
-Nhiệm vụ: Phân tích nội dung và đưa ra kết quả ngắn gọn, tập trung vào đáp án và kết luận.
 
-YÊU CẦU:
-1. Xác định môn học: Toán, Lý, Hóa, Sinh, Văn, Anh, Sử, Địa, GDCD, hoặc "Không xác định"
-2. Xác định lớp: 10, 11, 12, hoặc "Không xác định"
-3. Nếu có câu hỏi/bài tập: Đưa ra đáp án ngắn gọn, rõ ràng
-4. Đưa ra kết luận ngắn gọn (tối đa 2-3 câu, tập trung vào điểm chính)
-5. Chỉ phân tích nếu nội dung liên quan học tập THPT
+    model_name = settings.GEMINI_MODEL or "gemini-2.5-flash-lite"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
 
-QUAN TRỌNG:
-- Đáp án phải chính xác, ngắn gọn
-- Kết luận phải in đậm, nổi bật
-- Nếu không liên quan học tập, trả về is_educational: false
+    # Build parts: system instruction + nội dung
+    parts: List[Dict[str, Any]] = [
+        {"text": SYSTEM_INSTRUCTION_ANH_THO}
+    ]
 
-FORMAT OUTPUT (JSON):
-{
-  "subject": "Môn học",
-  "grade": "Lớp",
-  "answer": "Đáp án ngắn gọn (nếu có)",
-  "conclusion": "**Kết luận ngắn gọn** (in đậm)",
-  "is_educational": true/false
-}
+    if content:
+        parts.append({"text": f"\nNỘI DUNG BÀI ĐĂNG:\n{content}"})
 
-Ví dụ:
-- Nếu là bài toán: subject="Toán", grade="12", answer="x = 5", conclusion="**Đây là phương trình bậc hai, nghiệm là x = 5**"
-- Nếu không liên quan: {"is_educational": false, "conclusion": "Nội dung không liên quan học tập"}
-
-Hãy phân tích và trả về JSON hợp lệ."""
-
-        # Prepare content parts
-        parts = [{"text": prompt}]
-        
-        # Add text content if available
-        if request.content:
-            parts.append({"text": f"\n\nNội dung:\n{request.content}"})
-        
-        # Add images if available
-        if request.image_urls:
-            parts.append({"text": "\n\nHình ảnh:"})
-            for img_url in request.image_urls[:3]:  # Limit to 3 images
-                img_base64 = download_image_as_base64(img_url)
-                if img_base64:
-                    parts.append({
+    if image_urls:
+        parts.append({"text": "\nCÁC HÌNH ẢNH ĐÍNH KÈM:"})
+        for img_url in image_urls[:3]:
+            img_base64 = download_image_as_base64(img_url)
+            if img_base64:
+                # Lấy mime type từ prefix
+                header, data = img_base64.split(",", 1)
+                mime_type = header.split(";")[0].replace("data:", "") or "image/jpeg"
+                parts.append(
+                    {
                         "inline_data": {
-                            "mime_type": "image/jpeg",
-                            "data": img_base64.split(",")[1]  # Remove data:image/jpeg;base64, prefix
+                            "mime_type": mime_type,
+                            "data": data,
                         }
-                    })
-        
-        payload = {
-            "contents": [{
+                    }
+                )
+
+    payload = {
+        "contents": [
+            {
                 "role": "user",
-                "parts": parts
-            }],
-            "generationConfig": {
-                "temperature": 0.3,
-                "topK": 20,
-                "topP": 0.8,
-                "maxOutputTokens": 500,  # Keep it short
+                "parts": parts,
             }
-        }
-        
-        response = requests.post(url, json=payload, timeout=30)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # Extract response text
-        if "candidates" in data and len(data["candidates"]) > 0:
-            ai_response = data["candidates"][0]["content"]["parts"][0]["text"]
-            
-            # Try to parse JSON from response
-            import json
-            import re
-            
-            # Extract JSON from response
-            json_match = re.search(r'\{[^{}]*\}', ai_response, re.DOTALL)
-            if json_match:
-                try:
-                    result = json.loads(json_match.group())
-                    return result
-                except:
-                    pass
-            
-            # If JSON parsing fails, try to extract information manually
-            result = {
-                "is_educational": True,
-                "subject": "Không xác định",
-                "grade": "Không xác định",
-                "answer": None,
-                "conclusion": ai_response.strip()
-            }
-            
-            # Try to extract subject
-            subjects = ["Toán", "Lý", "Hóa", "Sinh", "Văn", "Anh", "Sử", "Địa", "GDCD"]
-            for subj in subjects:
-                if subj.lower() in ai_response.lower():
-                    result["subject"] = subj
-                    break
-            
-            # Try to extract grade
-            for grade in ["10", "11", "12"]:
-                if grade in ai_response:
-                    result["grade"] = grade
-                    break
-            
-            return result
-        else:
-            raise HTTPException(status_code=500, detail="No response from Gemini API")
-        
+        ],
+        "generationConfig": {
+            "temperature": 0.3,
+            "topK": 20,
+            "topP": 0.8,
+            "maxOutputTokens": 600,
+        },
+    }
+
+    response = requests.post(url, json=payload, timeout=30)
+    response.raise_for_status()
+
+    data = response.json()
+    if "candidates" not in data or not data["candidates"]:
+        raise HTTPException(status_code=500, detail="No response from Gemini API")
+
+    ai_response = data["candidates"][0]["content"]["parts"][0]["text"]
+
+    # Cố gắng parse JSON trực tiếp
+    try:
+        return json.loads(ai_response)
+    except Exception:
+        # Tìm khối JSON trong text nếu có
+        json_match = re.search(r"\{[\s\S]*\}", ai_response, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group())
+            except Exception:
+                pass
+
+    # Fallback: tạo JSON tối thiểu
+    fallback: Dict[str, Any] = {
+        "is_educational": True,
+        "moderation_status": "clean",
+        "reason": None,
+        "metadata": {
+            "subject": None,
+            "grade": None,
+            "topic": None,
+            "tags": [],
+        },
+        "anh_tho_comment": ai_response.strip(),
+        "content_warning": None,
+        "code_solution_refused": False,
+    }
+    return fallback
+
+
+@router.post("/analyze", response_model=Dict[str, Any])
+async def analyze_post(request: AnalysisRequest):
+    """Phân tích nội dung bài đăng và trả về JSON moderation chuẩn hóa."""
+    try:
+        result = run_post_analysis(request.content, request.image_urls or [])
+        return result
+    except HTTPException:
+        raise
     except requests.exceptions.RequestException as e:
         raise HTTPException(
             status_code=503,
