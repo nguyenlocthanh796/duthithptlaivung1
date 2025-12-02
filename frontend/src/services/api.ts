@@ -38,6 +38,22 @@ export interface Post {
   userReactions?: Record<string, string>;
 }
 
+export interface Comment {
+  id: string;
+  post_id: string;
+  author_id: string;
+  author_name: string;
+  author_role: string;
+  content: string;
+  is_ai_generated: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommentCreate {
+  content: string;
+}
+
 export interface PostCreate {
   content: string;
   subject?: string;
@@ -48,6 +64,13 @@ export interface PostCreate {
   author_name?: string;
   author_email?: string;
   author_role?: string;
+}
+
+export interface PostUpdate {
+  content?: string;
+  subject?: string;
+  post_type?: string;
+  image_url?: string;
 }
 
 export interface Exam {
@@ -204,6 +227,21 @@ export const postsAPI = {
     });
   },
   
+  async update(postId: string, data: PostUpdate): Promise<Post> {
+    return apiRequest<Post>(`/api/posts/${postId}`, {
+      method: "PUT",
+      body: data,
+      requireAuth: true,
+    });
+  },
+  
+  async delete(postId: string): Promise<{ message: string }> {
+    return apiRequest<{ message: string }>(`/api/posts/${postId}`, {
+      method: "DELETE",
+      requireAuth: true,
+    });
+  },
+  
   async like(postId: string): Promise<{ message: string; likes: number }> {
     return apiRequest(`/api/posts/${postId}/like`, {
       method: "POST",
@@ -222,6 +260,43 @@ export const postsAPI = {
         user_id: userId,
         reaction: reaction,
       },
+      requireAuth: true,
+    });
+  },
+};
+
+// ==================== COMMENTS API ====================
+
+export const commentsAPI = {
+  async getForPost(postId: string, limit = 50): Promise<Comment[]> {
+    const params = new URLSearchParams();
+    params.append('limit', String(limit));
+    const query = params.toString();
+    return apiRequest<Comment[]>(
+      `/api/posts/${postId}/comments${query ? `?${query}` : ''}`,
+      { requireAuth: false }
+    );
+  },
+
+  async create(postId: string, data: CommentCreate): Promise<Comment> {
+    return apiRequest<Comment>(`/api/posts/${postId}/comments`, {
+      method: 'POST',
+      body: data,
+      requireAuth: true,
+    });
+  },
+
+  async update(postId: string, commentId: string, data: CommentCreate): Promise<Comment> {
+    return apiRequest<Comment>(`/api/posts/${postId}/comments/${commentId}`, {
+      method: 'PUT',
+      body: data,
+      requireAuth: true,
+    });
+  },
+
+  async delete(postId: string, commentId: string): Promise<{ message: string }> {
+    return apiRequest<{ message: string }>(`/api/posts/${postId}/comments/${commentId}`, {
+      method: 'DELETE',
       requireAuth: true,
     });
   },
@@ -317,6 +392,28 @@ export const healthAPI = {
   
   async root(): Promise<any> {
     return apiRequest("/", { requireAuth: false });
+  },
+};
+
+// ==================== ME / PROFILE API ====================
+
+export const meAPI = {
+  async overview(): Promise<{
+    user: { id: string; name: string };
+    stats: { total_posts: number; total_comments: number; favorite_subject: string | null };
+    recent_posts: {
+      id: string;
+      content: string;
+      subject?: string;
+      created_at?: string;
+      comments: number;
+      likes: number;
+    }[];
+  }> {
+    return apiRequest("/api/me/overview", {
+      method: "GET",
+      requireAuth: true,
+    });
   },
 };
 

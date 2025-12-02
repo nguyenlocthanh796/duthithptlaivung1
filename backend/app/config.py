@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     # Gemini API (optional, for AI features)
     GEMINI_API_KEY: str = ""
     GEMINI_API_KEYS: str = ""  # Comma-separated keys for rotation
-    GEMINI_MODEL: str = "gemini-2.5-flash-lite"  # Model to use: gemini-pro, gemini-2.5-flash-lite, etc.
+    # Model mặc định cho các tác vụ text (chat Anh Thơ, phân tích bài đăng)
+    # Có thể override bằng biến môi trường GEMINI_MODEL trên VM.
+    GEMINI_MODEL: str = "gemini-2.0-flash-exp"
     
     # Google Drive (optional)
     GOOGLE_DRIVE_FOLDER_ID: str = ""

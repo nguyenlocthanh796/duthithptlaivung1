@@ -6,7 +6,7 @@ import { useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Users, Building, BookOpen, GraduationCap,
-  LogOut, Bell, Search, Menu
+  LogOut, Bell, Search, Menu, Briefcase
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
@@ -22,6 +22,7 @@ const StudentExam = lazy(() => import('./components/StudentExam'));
 const StudentLibrary = lazy(() => import('./components/StudentLibrary'));
 const MinistrySchools = lazy(() => import('./components/MinistrySchools'));
 const TeacherGradebook = lazy(() => import('./components/TeacherGradebook'));
+const StudentProfile = lazy(() => import('./components/StudentProfile'));
 
 // --- UTILS ---
 const calculateAverage = (scores: any) => {
@@ -46,6 +47,7 @@ const AppContent = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [anhThoContext, setAnhThoContext] = useState<string | undefined>(undefined);
 
   // Helper: map role + tab -> path
   const getPathForRoleTab = (r: string, tab: string) => {
@@ -174,9 +176,18 @@ const AppContent = () => {
           <div className="max-w-7xl mx-auto">
             <Suspense fallback={<div className="p-10 text-center text-slate-400">Đang tải nội dung...</div>}>
               {/* Student Views */}
-              {role === 'student' && activeTab === 'feed' && <StudentFeed showToast={showToast} />}
-              {role === 'student' && activeTab === 'exams' && <StudentExam showToast={showToast} />}
-              {role === 'student' && activeTab === 'library' && <StudentLibrary showToast={showToast} />}
+              {role === 'student' && activeTab === 'feed' && (
+                <StudentFeed showToast={showToast} onAskWithContext={setAnhThoContext} />
+              )}
+              {role === 'student' && activeTab === 'exams' && (
+                <StudentExam showToast={showToast} />
+              )}
+              {role === 'student' && activeTab === 'library' && (
+                <StudentLibrary showToast={showToast} />
+              )}
+              {role === 'student' && activeTab === 'profile' && (
+                <StudentProfile showToast={showToast} />
+              )}
 
               {/* Ministry Views */}
               {role === 'ministry' && activeTab === 'schools' && (
@@ -240,7 +251,7 @@ const AppContent = () => {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Nút FAB chat Anh Thơ Live */}
-      <AnhThoChatFab />
+      <AnhThoChatFab contextText={anhThoContext} />
     </div>
   );
 };

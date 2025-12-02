@@ -43,6 +43,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           { id: 'feed', label: 'Bảng tin', icon: Home },
           { id: 'exams', label: 'Thi cử', icon: FileText },
           { id: 'library', label: 'Tài liệu', icon: BookOpen },
+          { id: 'profile', label: 'Hồ sơ', icon: Users },
         ];
     }
   };

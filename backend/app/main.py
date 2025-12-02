@@ -11,7 +11,7 @@ import uvicorn
 
 from app.config import settings
 from app.sql_database import db
-from app.routers import exams, posts, ai_chat, documents, ai_feed, ai_analysis
+from app.routers import exams, posts, ai_chat, documents, ai_feed, ai_analysis, me
 
 
 app = FastAPI(
@@ -51,6 +51,7 @@ app.include_router(ai_chat.router)
 app.include_router(documents.router)
 app.include_router(ai_feed.router)
 app.include_router(ai_analysis.router)
+app.include_router(me.router)
 
 # Pydantic Models
 class DocumentCreate(BaseModel):

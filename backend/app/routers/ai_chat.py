@@ -56,6 +56,10 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
     history: Optional[List[ChatMessage]] = []
+    # Ngữ cảnh thêm từ frontend (vd: nội dung bài đăng, môn, lớp...)
+    context: Optional[str] = None
+    # ID bài viết (nếu câu hỏi đến từ nút "Giải giúp mình với")
+    post_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -93,21 +97,23 @@ async def chat_with_ai(request: ChatRequest):
         model_name = settings.GEMINI_MODEL or "gemini-2.5-flash-lite"
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         
-        # Build conversation history
-        contents = []
-        for msg in request.history[-10:]:  # Last 10 messages for context
-            # Gemini v1 sử dụng role "user" và "model" thay vì "assistant"
-            role = "user" if msg.role == "user" else "model"
-            contents.append({
-                "role": role,
-                "parts": [{"text": msg.content}]
-            })
-        
-        # Add current user message
-        contents.append({
+        # Chuẩn hoá message cuối cùng gửi cho Gemini, có kèm ngữ cảnh nếu có.
+        if request.context:
+            full_message = (
+                "Ngữ cảnh bài đăng của học sinh:\n"
+                f"{request.context.strip()}\n\n"
+                "Câu hỏi hiện tại của học sinh:\n"
+                f"{request.message.strip()}"
+            )
+        else:
+            full_message = request.message.strip()
+
+        # Để tránh lỗi 400 lặp lại ở các lượt chat sau, tạm thời KHÔNG gửi toàn bộ history lên Gemini
+        # mà chỉ gửi message hiện tại (stateless chat).
+        contents = [{
             "role": "user",
-            "parts": [{"text": request.message}]
-        })
+            "parts": [{"text": full_message}]
+        }]
         
         # System instruction cho persona Anh Thơ
         system_instruction = {
@@ -130,21 +136,16 @@ async def chat_with_ai(request: ChatRequest):
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            # Trả lỗi Gemini dưới dạng câu trả lời của Anh Thơ (200 OK) thay vì 503,
-            # giúp frontend hiển thị thân thiện hơn.
-            error_msg = ""
-            try:
-                data = response.json()
-                error_msg = data.get("error", {}).get("message") or str(e)
-            except Exception:
-                error_msg = response.text or str(e)
+            # Không bao giờ trả raw message (có thể lộ API key) ra frontend.
+            # Ghi log đơn giản ở server, trả lời thân thiện cho người dùng.
+            print(f"[AI_CHAT_HTTP_ERROR] {e}")
 
-            conversation_id = request.conversation_id or f"conv_{hash(request.message) % 1000000}"
-            model_name = settings.GEMINI_MODEL or "gemini-2.5-flash-lite"
+            conversation_id = request.conversation_id or f"conv_{hash(full_message) % 1000000}"
+            model_name = settings.GEMINI_MODEL or "gemini-2.0-flash-exp"
 
             safe_msg = (
-                "Anh Thơ không thể trả lời câu này vì yêu cầu gửi tới Gemini bị lỗi: "
-                f"{error_msg}. Cậu thử rút gọn lại đề bài hoặc hỏi theo cách khác nhé."
+                "Anh Thơ đang hơi bận hoặc câu hỏi này chưa được hỗ trợ hoàn toàn. "
+                "Cậu thử ghi rõ đề bài hơn, rút gọn nội dung hoặc gửi lại sau một lúc nhé."
             )
             return {
                 "response": safe_msg,
@@ -161,9 +162,9 @@ async def chat_with_ai(request: ChatRequest):
             raise HTTPException(status_code=500, detail="No response from Gemini API")
         
         # Generate conversation ID if not provided
-        conversation_id = request.conversation_id or f"conv_{hash(request.message) % 1000000}"
+        conversation_id = request.conversation_id or f"conv_{hash(full_message) % 1000000}"
         
-        model_name = settings.GEMINI_MODEL or "gemini-2.5-flash-lite"
+        model_name = settings.GEMINI_MODEL or "gemini-2.0-flash-exp"
         return {
             "response": ai_response,
             "conversation_id": conversation_id,
@@ -171,10 +172,19 @@ async def chat_with_ai(request: ChatRequest):
         }
         
     except requests.exceptions.RequestException as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Error calling Gemini API: {str(e)}"
+        # Lỗi mạng / timeout khi gọi Gemini → không trả 503 nữa, trả câu trả lời an toàn.
+        print(f"[AI_CHAT_REQUEST_ERROR] {e}")
+        conversation_id = request.conversation_id or f"conv_{hash(request.message) % 1000000}"
+        model_name = settings.GEMINI_MODEL or "gemini-2.0-flash-exp"
+        safe_msg = (
+            "Hiện tại kết nối tới dịch vụ AI đang không ổn định nên Anh Thơ tạm thời không trả lời được. "
+            "Cậu thử gửi lại sau một lúc, hoặc tiếp tục xem các bài trên Bảng tin nhé."
         )
+        return {
+            "response": safe_msg,
+            "conversation_id": conversation_id,
+            "model": model_name,
+        }
     except Exception as e:
         raise HTTPException(
             status_code=500,

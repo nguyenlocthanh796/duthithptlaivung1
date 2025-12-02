@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { apiRequest } from '../services/api';
 import RichTextMessage from './RichTextMessage';
@@ -22,6 +22,13 @@ const AnhThoChatFab: React.FC<AnhThoChatFabProps> = ({ contextText }) => {
     setOpen((prev) => !prev);
   };
 
+  // Khi contextText thay đổi (vd: từ nút "Giải giúp mình với"), tự động mở chat
+  useEffect(() => {
+    if (contextText && !open) {
+      setOpen(true);
+    }
+  }, [contextText]);
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || sending) return;
@@ -42,13 +49,10 @@ const AnhThoChatFab: React.FC<AnhThoChatFabProps> = ({ contextText }) => {
         content: m.content,
       }));
 
-      const contextPrefix = contextText
-        ? `Ngữ cảnh hiện tại: ${contextText}\n\nCâu hỏi của mình: `
-        : '';
-
       const body = {
-        message: contextPrefix + text,
+        message: text,
         history: historyPayload,
+        context: contextText || undefined,
       };
 
       const res = await apiRequest<{ response: string; conversation_id: string }>(
@@ -65,14 +69,14 @@ const AnhThoChatFab: React.FC<AnhThoChatFabProps> = ({ contextText }) => {
         { role: 'assistant', content: res.response },
       ]);
     } catch (err: any) {
+      // Log chi tiết lỗi ở console để dev xem, không hiển thị message thô cho người dùng
+      console.error('AnhThoChatFab error:', err);
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
           content:
-            'Anh Thơ đang hơi bận chút, cậu thử gửi lại sau nhé. (' +
-            (err.message || 'Lỗi kết nối') +
-            ')',
+            'Anh Thơ đang hơi bận chút hoặc mạng đang chập chờn, cậu thử gửi lại sau vài phút nhé.',
         },
       ]);
     } finally {
