@@ -73,8 +73,8 @@ export const usePosts = (options: UsePostsOptions = {}) => {
   }, []);
 
   const reactToPost = useCallback(async (
-    postId: string, 
-    reaction: "like" | "love" | "care" | "haha" | "wow" | "sad" | "angry"
+    postId: string,
+    reaction: "idea" | "thinking" | "resource" | "motivation"
   ) => {
     try {
       await postsAPI.react(postId, reaction);

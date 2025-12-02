@@ -205,11 +205,17 @@ export async function apiRequest<T>(
 // ==================== POSTS API ====================
 
 export const postsAPI = {
-  async getAll(filters?: { subject?: string; author_id?: string; limit?: number }): Promise<Post[]> {
+  async getAll(filters?: {
+    subject?: string;
+    author_id?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<Post[]> {
     const params = new URLSearchParams();
     if (filters?.subject) params.append("subject", filters.subject);
     if (filters?.author_id) params.append("author_id", filters.author_id);
     if (filters?.limit) params.append("limit", filters.limit.toString());
+    if (typeof filters?.offset === 'number') params.append("offset", filters.offset.toString());
     
     const query = params.toString();
     return apiRequest<Post[]>(`/api/posts${query ? `?${query}` : ""}`, { requireAuth: false });

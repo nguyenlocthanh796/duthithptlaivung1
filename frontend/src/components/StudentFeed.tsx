@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, ChangeEvent, FormEvent } from 'react';
+import React, { useEffect, useMemo, useRef, useState, ChangeEvent, FormEvent } from 'react';
 import { Home, MessageCircle, Filter as FilterIcon, Image as ImageIcon, Send, Trash2, MoreHorizontal } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { Post, PostCreate, postsAPI, Comment, commentsAPI } from '../services/api';
@@ -15,7 +15,8 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
   const [subjectFilter, setSubjectFilter] = useState<string>('all');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
-  const [visibleCount, setVisibleCount] = useState<number>(5);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
 
   // Composer state
   const [content, setContent] = useState('');
@@ -35,29 +36,27 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
   const [editingContent, setEditingContent] = useState<string>('');
   const [editingSubject, setEditingSubject] = useState<string>('toan');
 
-  useEffect(() => {
-    void loadPosts();
-  }, []);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const PREFETCH_LIMIT = 20;
   const PAGE_SIZE = 5;
 
-  const loadPosts = async () => {
-    try {
-      if (!posts.length) {
+  // Tải trang đầu tiên hoặc khi thay đổi bộ lọc
+  useEffect(() => {
+    const loadInitial = async () => {
+      try {
         setLoading(true);
-      } else {
-        setRefreshing(true);
+        const data = await postsAPI.getAll({ limit: PAGE_SIZE });
+        setPosts(data);
+        setHasMore(data.length === PAGE_SIZE);
+      } catch (error: any) {
+        showToast('Không thể tải bảng tin: ' + error.message, 'error');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-      const data = await postsAPI.getAll({ limit: PREFETCH_LIMIT });
-      setPosts(data);
-    } catch (error: any) {
-      showToast('Không thể tải bảng tin: ' + error.message, 'error');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+    };
+    void loadInitial();
+  }, []);
 
   const filteredPosts = useMemo(() => {
     return posts.filter((post) => {
@@ -79,14 +78,41 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
     });
   }, [posts, subjectFilter, gradeFilter, tagFilter]);
 
-  const visiblePosts = useMemo(
-    () => filteredPosts.slice(0, visibleCount),
-    [filteredPosts, visibleCount]
-  );
+  const visiblePosts = filteredPosts;
 
-  const handleLoadMore = () => {
-    setVisibleCount((prev) => prev + PAGE_SIZE);
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    try {
+      setLoadingMore(true);
+      const offset = posts.length;
+      const data = await postsAPI.getAll({ limit: PAGE_SIZE, offset });
+      setPosts((prev) => [...prev, ...data]);
+      setHasMore(data.length === PAGE_SIZE);
+    } catch (error: any) {
+      console.error('Error loading more posts:', error);
+      showToast('Không thể tải thêm bài viết: ' + (error.message || 'Lỗi không xác định'), 'error');
+    } finally {
+      setLoadingMore(false);
+    }
   };
+
+  // Infinite scroll với IntersectionObserver
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          void handleLoadMore();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+    };
+  }, [loadMoreRef.current, posts.length, hasMore, loadingMore]);
 
   const loadComments = async (postId: string) => {
     try {
@@ -194,7 +220,6 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
       setImageFile(null);
       setPreviewUrl(null);
       setImageInfo(null);
-      setVisibleCount(PAGE_SIZE); // reset lại page view, luôn thấy bài mới
       showToast('Đăng bài thành công!', 'success');
     } catch (err: any) {
       console.error('Error creating post:', err);
@@ -501,7 +526,6 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
                       onClick={async () => {
                         try {
                           await postsAPI.react(post.id, r.key);
-                          await loadPosts();
                         } catch (error: any) {
                           showToast('Không thể cập nhật cảm xúc: ' + error.message, 'error');
                         }
@@ -635,17 +659,13 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
           </div>
         ))
       )}
-      {visiblePosts.length < filteredPosts.length && (
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={handleLoadMore}
-            className="mt-2 px-4 py-1.5 rounded-full border border-slate-300 text-xs text-slate-600 hover:bg-slate-50"
-          >
-            Xem thêm bài viết
-          </button>
-        </div>
-      )}
+      <div ref={loadMoreRef} className="h-8 flex items-center justify-center text-xs text-slate-400">
+        {loadingMore
+          ? 'Đang tải thêm...'
+          : hasMore
+          ? 'Kéo xuống để xem thêm bài viết'
+          : 'Đã hiển thị hết các bài hiện có'}
+      </div>
     </div>
   );
 };

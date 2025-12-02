@@ -5,8 +5,7 @@
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { 
-  Users, Building, BookOpen, GraduationCap,
-  LogOut, Bell, Search, Menu, Briefcase
+  Bell, Search, Menu, Briefcase
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
@@ -25,7 +24,7 @@ const TeacherGradebook = lazy(() => import('./components/TeacherGradebook'));
 const StudentProfile = lazy(() => import('./components/StudentProfile'));
 
 // --- UTILS ---
-const calculateAverage = (scores: any) => {
+const calculateAverage = (scores: any): string => {
   const { m15, m45, mid, end } = scores;
   let total = 0;
   let count = 0;
@@ -35,7 +34,11 @@ const calculateAverage = (scores: any) => {
   if (mid !== null) { total += Number(mid) * 2; count += 2; }
   if (end !== null) { total += Number(end) * 3; count += 3; }
   
-  return count === 0 ? 0 : (total / count).toFixed(1);
+  if (count === 0) {
+    return '0.0';
+  }
+
+  return (total / count).toFixed(1);
 };
 
 // 7. MAIN APP CONTENT (Inner component that uses hooks)
@@ -175,7 +178,7 @@ const AppContent = () => {
         <main className="flex-1 p-6 overflow-y-auto">
           <div className="max-w-7xl mx-auto">
             <Suspense fallback={<div className="p-10 text-center text-slate-400">Đang tải nội dung...</div>}>
-              {/* Student Views */}
+            {/* Student Views */}
               {role === 'student' && activeTab === 'feed' && (
                 <StudentFeed showToast={showToast} onAskWithContext={setAnhThoContext} />
               )}
@@ -189,60 +192,60 @@ const AppContent = () => {
                 <StudentProfile showToast={showToast} />
               )}
 
-              {/* Ministry Views */}
+            {/* Ministry Views */}
               {role === 'ministry' && activeTab === 'schools' && (
                 <MinistrySchools showToast={showToast} />
               )}
-              {role === 'ministry' && activeTab === 'dashboard' && (
+            {role === 'ministry' && activeTab === 'dashboard' && (
                 <div className="p-10 text-center text-slate-400">
                   Dashboard Bộ Giáo Dục (Demo Charts)
                 </div>
-              )}
-              {role === 'ministry' && activeTab === 'policies' && (
-                <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
+            )}
+            {role === 'ministry' && activeTab === 'policies' && (
+              <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
                   <Briefcase size={48} className="mb-4 opacity-50" />
                   <p>
                     Tính năng <b>policies</b> đang được phát triển
                   </p>
-                </div>
-              )}
+              </div>
+            )}
 
-              {/* School Views */}
-              {role === 'school' && activeTab === 'dashboard' && (
-                <div className="p-10 text-center text-slate-400">Dashboard Nhà Trường</div>
-              )}
-              {role === 'school' && activeTab === 'teachers' && (
-                <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
+            {/* School Views */}
+            {role === 'school' && activeTab === 'dashboard' && (
+              <div className="p-10 text-center text-slate-400">Dashboard Nhà Trường</div>
+            )}
+            {role === 'school' && activeTab === 'teachers' && (
+              <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
                   <Briefcase size={48} className="mb-4 opacity-50" />
                   <p>
                     Tính năng <b>teachers</b> đang được phát triển
                   </p>
-                </div>
-              )}
-              {role === 'school' && activeTab === 'classes' && (
-                <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
+              </div>
+            )}
+            {role === 'school' && activeTab === 'classes' && (
+              <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
                   <Briefcase size={48} className="mb-4 opacity-50" />
                   <p>
                     Tính năng <b>classes</b> đang được phát triển
                   </p>
-                </div>
-              )}
+              </div>
+            )}
 
-              {/* Teacher Views */}
+            {/* Teacher Views */}
               {role === 'teacher' && activeTab === 'gradebook' && (
                 <TeacherGradebook showToast={showToast} calculateAverage={calculateAverage} />
               )}
-              {role === 'teacher' && activeTab === 'dashboard' && (
-                <div className="p-10 text-center text-slate-400">Dashboard Lớp Chủ Nhiệm</div>
-              )}
-              {role === 'teacher' && activeTab === 'students' && (
-                <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
+            {role === 'teacher' && activeTab === 'dashboard' && (
+              <div className="p-10 text-center text-slate-400">Dashboard Lớp Chủ Nhiệm</div>
+            )}
+            {role === 'teacher' && activeTab === 'students' && (
+              <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
                   <Briefcase size={48} className="mb-4 opacity-50" />
                   <p>
                     Tính năng <b>students</b> đang được phát triển
                   </p>
-                </div>
-              )}
+              </div>
+            )}
             </Suspense>
           </div>
         </main>

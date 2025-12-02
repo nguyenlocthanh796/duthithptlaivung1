@@ -49,7 +49,10 @@ const PostsList: React.FC = () => {
     }
   };
 
-  const handleReact = async (postId: string, reaction: "like" | "love" | "care" | "haha" | "wow" | "sad" | "angry") => {
+  const handleReact = async (
+    postId: string,
+    reaction: 'idea' | 'thinking' | 'resource' | 'motivation'
+  ) => {
     try {
       // Gọi API react - cần authentication
       await postsAPI.react(postId, reaction);
@@ -116,8 +119,8 @@ const PostsList: React.FC = () => {
               {/* Buttons */}
               <div>
                 <button onClick={() => handleLike(post.id)}>👍 Like ({post.likes})</button>
-                <button onClick={() => handleReact(post.id, 'love')}>❤️ Love</button>
-                <button onClick={() => handleReact(post.id, 'haha')}>😂 Haha</button>
+                <button onClick={() => handleReact(post.id, 'idea')}>💡 Hiểu rồi</button>
+                <button onClick={() => handleReact(post.id, 'motivation')}>🔥 Cố lên</button>
               </div>
             </div>
           ))
