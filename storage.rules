@@ -1,0 +1,45 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check file size (max 50MB)
+    function isValidSize() {
+      return request.resource.size < 50 * 1024 * 1024;
+    }
+    
+    // Helper function to check file type
+    function isValidImageType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    function isValidDocumentType() {
+      return request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('application/msword') ||
+             request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.*') ||
+             request.resource.contentType.matches('application/vnd.ms-excel.*');
+    }
+
+    // Posts images - authenticated users can upload/read
+    match /posts/{allPaths=**} {
+      allow read: if true; // Anyone can read
+      allow write: if isAuthenticated() && isValidSize() && isValidImageType();
+    }
+
+    // Documents - authenticated users can upload/read
+    match /documents/{allPaths=**} {
+      allow read: if true; // Anyone can read
+      allow write: if isAuthenticated() && isValidSize() && isValidDocumentType();
+    }
+
+    // User avatars - users can upload their own
+    match /avatars/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == userId && isValidSize() && isValidImageType();
+    }
+  }
+}
+

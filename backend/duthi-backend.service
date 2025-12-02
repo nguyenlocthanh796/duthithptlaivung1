@@ -1,0 +1,20 @@
+[Unit]
+Description=DuThi THPT Backend API Service
+After=network.target
+
+[Service]
+Type=simple
+User=Admin
+Group=Admin
+WorkingDirectory=/home/Admin/duthithptlaivung1find/backend
+Environment="PATH=/home/Admin/duthithptlaivung1find/backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/Admin/duthithptlaivung1find/backend/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=duthi-backend
+
+[Install]
+WantedBy=multi-user.target
+
