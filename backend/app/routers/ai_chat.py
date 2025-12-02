@@ -8,6 +8,7 @@ import os
 import requests
 
 from app.config import settings
+from app.sql_database import db
 
 router = APIRouter(prefix="/api/ai-chat", tags=["ai-chat"])
 
@@ -165,6 +166,22 @@ async def chat_with_ai(request: ChatRequest):
         conversation_id = request.conversation_id or f"conv_{hash(full_message) % 1000000}"
         
         model_name = settings.GEMINI_MODEL or "gemini-2.0-flash-exp"
+
+        # Lưu log đơn giản cho lần chat này (phục vụ hồ sơ học tập / lịch sử theo bài đăng)
+        try:
+            log_data: Dict[str, Any] = {
+                "message": request.message,
+                "context": request.context,
+                "post_id": request.post_id,
+                "conversation_id": conversation_id,
+                "model": model_name,
+                "ai_response": ai_response,
+            }
+            db.create("ai_chat_logs", log_data)
+        except Exception as log_err:
+            # Không làm hỏng flow chính nếu ghi log thất bại
+            print(f"[AI_CHAT_LOG_ERROR] {log_err}")
+
         return {
             "response": ai_response,
             "conversation_id": conversation_id,

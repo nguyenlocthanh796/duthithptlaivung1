@@ -278,11 +278,11 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in">
       {/* Composer tạo bài viết */}
       <form
         onSubmit={handleCreatePost}
-        className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-3"
+        className="bg-white sm:rounded-2xl shadow-sm border border-slate-200 sm:border-slate-200 border-x-0 sm:border-x p-3 sm:p-4 space-y-3 -mx-4 sm:mx-0"
       >
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold text-sm">
@@ -346,7 +346,7 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
       </form>
 
       {/* Bộ lọc */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-1 sm:px-0">
         <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
           <Home className="text-indigo-600" /> Bảng tin học tập
         </h2>
@@ -391,12 +391,15 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
       </div>
 
       {visiblePosts.length === 0 ? (
-        <div className="bg-white p-10 rounded-2xl text-center text-slate-400">
+        <div className="bg-white p-8 sm:p-10 sm:rounded-2xl text-center text-slate-400 border-x-0 sm:border sm:border-slate-200 -mx-4 sm:mx-0">
           Không có bài viết phù hợp bộ lọc hiện tại
         </div>
       ) : (
         visiblePosts.map((post) => (
-          <div key={post.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div
+            key={post.id}
+            className="bg-white p-4 sm:p-6 sm:rounded-2xl shadow-sm border border-slate-200 sm:border-slate-200 border-x-0 sm:border-x -mx-4 sm:mx-0"
+          >
             <div className="flex items-start gap-4 mb-4">
               <div className="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
                 {post.author_name?.charAt(0) || 'U'}
