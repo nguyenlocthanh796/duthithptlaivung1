@@ -2,15 +2,15 @@
  * EduSystem Enterprise - Main App
  * Tích hợp với Backend API và Firebase Auth
  */
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { 
-  Users, Building, BookOpen, GraduationCap, BarChart2, Settings, 
-  LogOut, Bell, Search, Menu, X, ChevronRight, MoreHorizontal, 
-  Plus, Filter, Download, MapPin, Phone, Mail, FileText, 
-  CheckCircle, AlertTriangle, TrendingUp, Calendar, 
-  Briefcase, Globe, Award, Home, Clock, Heart, MessageCircle, Share2,
-  PenTool, Image as ImageIcon, Video, Sparkles, Smile, Target, Trash2, Edit3, Save, XCircle, Trophy
+  Users, Building, BookOpen, GraduationCap, BarChart2,
+  LogOut, Bell, Search, Menu, X,
+  Plus, Download, FileText,
+  CheckCircle, AlertTriangle,
+  Briefcase, Globe, Home, Clock, Heart, MessageCircle,
+  Target, Trash2, Edit3, Save, Trophy
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { postsAPI, examsAPI, documentsAPI, Post, Exam, Document } from './services/api';
@@ -156,8 +156,6 @@ const Sidebar = ({
 const StudentFeed = ({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const { currentUser } = useAuth();
-
   useEffect(() => {
     loadPosts();
   }, []);
