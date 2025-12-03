@@ -1,7 +1,7 @@
 """
 Post-related API endpoints
 """
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Body
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -25,7 +25,12 @@ class PostCreate(BaseModel):
     author_role: str = "student"
     subject: Optional[str] = None
     post_type: str = "text"
+    # Hỗ trợ backward compatibility: image_url cũ vẫn hoạt động
     image_url: Optional[str] = None
+    # Mới: mảng ảnh (tối đa 5)
+    image_urls: Optional[List[str]] = None
+    # Mới: mảng metadata tài liệu (PDF/Word)
+    attachments: Optional[List[Dict[str, Any]]] = None
     hasQuestion: Optional[bool] = False
     has_question: Optional[bool] = False
 
@@ -263,6 +268,23 @@ async def create_post(
         has_question = post.has_question or post.hasQuestion or False
 
         now_iso = datetime.now().isoformat()
+        
+        # Xử lý ảnh: ưu tiên image_urls mới, fallback về image_url cũ
+        image_urls_final = []
+        if post.image_urls:
+            # Giới hạn tối đa 5 ảnh
+            image_urls_final = post.image_urls[:5]
+        elif post.image_url:
+            # Backward compatibility: chuyển image_url cũ thành mảng 1 phần tử
+            image_urls_final = [post.image_url]
+        
+        # Xác định post_type dựa trên media
+        post_type_final = post.post_type
+        if image_urls_final:
+            post_type_final = "image"
+        elif post.attachments:
+            post_type_final = "document"
+        
         post_data = {
             "content": post.content,
             "author_id": author_id,
@@ -270,8 +292,13 @@ async def create_post(
             "author_email": author_email,
             "author_role": author_role,
             "subject": post.subject,
-            "post_type": post.post_type,
-            "image_url": post.image_url,
+            "post_type": post_type_final,
+            # Backward compatibility: giữ image_url cho các bài cũ
+            "image_url": image_urls_final[0] if image_urls_final else None,
+            # Mới: mảng ảnh
+            "image_urls": image_urls_final,
+            # Mới: mảng tài liệu
+            "attachments": post.attachments or [],
             "likes": 0,
             "comments": 0,
             "shares": 0,
@@ -457,17 +484,16 @@ async def like_post(
 @router.post("/{post_id}/reaction")
 async def react_to_post(
     post_id: str,
-    payload: ReactionRequest,
+    payload: Dict[str, Any] = Body(...),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """React to a post với bộ reaction học tập (idea, thinking, resource, motivation)."""
-    # Default user_id from authenticated user if not provided
-    if not payload.user_id:
-        if not current_user.get("uid"):
-            raise HTTPException(status_code=400, detail="user_id is required")
-        payload.user_id = current_user["uid"]
+    # Lấy user_id từ body (nếu có) hoặc từ current_user
+    user_id = payload.get("user_id") or current_user.get("uid")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
 
-    reaction_type = payload.reaction or "idea"
+    reaction_type = (payload.get("reaction") or "idea").strip()
     if reaction_type not in ALLOWED_REACTIONS:
         raise HTTPException(status_code=400, detail="Invalid reaction type")
 
@@ -486,7 +512,7 @@ async def react_to_post(
         for key in ALLOWED_REACTIONS:
             reaction_counts.setdefault(key, 0)
 
-        previous_reaction = user_reactions.get(payload.user_id)
+        previous_reaction = user_reactions.get(user_id)
         # likes giờ là tổng số reaction (để dùng nhanh cho UI)
         likes = data.get("likes", 0)
 
@@ -509,7 +535,7 @@ async def react_to_post(
                 likes = max(0, likes - 1)
 
             reaction_counts[reaction_type] = reaction_counts.get(reaction_type, 0) + 1
-            user_reactions[payload.user_id] = reaction_type
+            user_reactions[user_id] = reaction_type
             likes += 1
             new_reaction = reaction_type
 
@@ -523,7 +549,7 @@ async def react_to_post(
         db.update("posts", post_id, updates)
 
         result = {
-            "user_id": payload.user_id,
+            "user_id": user_id,
             "previous_reaction": previous_reaction,
             "new_reaction": new_reaction,
             "removed": removed,

@@ -13,6 +13,14 @@ const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, "");
 
 // ==================== TYPES ====================
 
+export interface Attachment {
+  url: string;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  uploaded_at?: string;
+}
+
 export interface Post {
   id: string;
   content: string;
@@ -28,7 +36,12 @@ export interface Post {
   shares: number;
   created_at: string;
   updated_at: string;
+  // Backward compatibility: image_url cũ vẫn hoạt động
   image_url?: string;
+  // Mới: mảng ảnh (tối đa 5)
+  image_urls?: string[];
+  // Mới: mảng tài liệu
+  attachments?: Attachment[];
   hasQuestion?: boolean;
   status?: string; // pending | clean | needs_review | rejected
   isEducational?: boolean | null;
@@ -58,7 +71,12 @@ export interface PostCreate {
   content: string;
   subject?: string;
   post_type?: string;
+  // Backward compatibility
   image_url?: string;
+  // Mới: mảng ảnh (tối đa 5)
+  image_urls?: string[];
+  // Mới: mảng metadata tài liệu
+  attachments?: Attachment[];
   hasQuestion?: boolean;
   author_id?: string;
   author_name?: string;
@@ -192,12 +210,35 @@ export async function apiRequest<T>(
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      const errorMessage = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+      const error = new Error(errorMessage);
+      // Lưu status code vào error để có thể kiểm tra sau
+      (error as any).status = response.status;
+      throw error;
     }
     
     return await response.json();
-  } catch (error) {
-    console.error(`API Error [${method} ${endpoint}]:`, error);
+  } catch (error: any) {
+    // Không log lỗi 404 cho comments endpoint vì có thể post không tồn tại hoặc chưa có comments
+    const isComments404 = error.status === 404 && endpoint.includes('/comments');
+    if (!isComments404) {
+      // Chỉ log error trong development
+      if (import.meta.env.DEV) {
+        console.error(`API Error [${method} ${endpoint}]:`, error);
+      }
+    }
+    
+    // Thêm thông tin chi tiết hơn cho error
+    if (error.status === 401) {
+      error.message = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+    } else if (error.status === 403) {
+      error.message = 'Bạn không có quyền thực hiện hành động này.';
+    } else if (error.status === 404) {
+      error.message = error.message || 'Không tìm thấy tài nguyên.';
+    } else if (error.status === 500) {
+      error.message = 'Lỗi server. Vui lòng thử lại sau.';
+    }
+    
     throw error;
   }
 }
@@ -278,10 +319,18 @@ export const commentsAPI = {
     const params = new URLSearchParams();
     params.append('limit', String(limit));
     const query = params.toString();
-    return apiRequest<Comment[]>(
+    try {
+      return await apiRequest<Comment[]>(
       `/api/posts/${postId}/comments${query ? `?${query}` : ''}`,
       { requireAuth: false }
     );
+    } catch (error: any) {
+      // Nếu lỗi 404, trả về mảng rỗng thay vì throw error
+      if (error.status === 404 || error.message?.includes('404') || error.message?.includes('Not Found')) {
+        return [];
+      }
+      throw error;
+    }
   },
 
   async create(postId: string, data: CommentCreate): Promise<Comment> {
@@ -386,6 +435,53 @@ export const documentsAPI = {
       method: "DELETE",
       requireAuth: true,
     });
+  },
+};
+
+// ==================== UPLOADS API ====================
+
+export const uploadsAPI = {
+  async uploadDocument(file: File): Promise<Attachment> {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const headers = await getHeaders(true);
+    // Xóa Content-Type để browser tự set với boundary cho multipart/form-data
+    delete (headers as any)["Content-Type"];
+    
+    const response = await fetch(`${API_BASE_URL}/api/uploads/doc`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  },
+
+  async uploadImage(file: File): Promise<Attachment> {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const headers = await getHeaders(true);
+    delete (headers as any)["Content-Type"];
+    
+    const response = await fetch(`${API_BASE_URL}/api/uploads/image`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    return await response.json();
   },
 };
 

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Comments API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            border-radius: 4px;
+        }
+        .test-section.error {
+            border-left-color: #f44336;
+        }
+        .test-section.warning {
+            border-left-color: #ff9800;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .error {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .info {
+            color: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Test Comments API</h1>
+        <p>Tool để kiểm tra endpoint comments trên backend</p>
+        
+        <div class="test-section">
+            <h3>1. Cấu hình</h3>
+            <label>API Base URL:</label>
+            <input type="text" id="apiUrl" value="https://tire-stick-she-boxed.trycloudflare.com" placeholder="https://your-backend-url.com">
+            
+            <label>Post ID:</label>
+            <input type="text" id="postId" value="bff659f5-8dc4-4aa1-8383-84fc236b1b11" placeholder="post-id-here">
+            
+            <label>Firebase Token (tùy chọn, để test với auth):</label>
+            <textarea id="firebaseToken" rows="3" placeholder="Paste Firebase ID token here (optional)"></textarea>
+            
+            <button onclick="loadTokenFromStorage()">Lấy token từ localStorage</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>2. Kiểm tra Backend</h3>
+            <button onclick="testHealth()">Kiểm tra Backend Health</button>
+            <div id="healthResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>3. Kiểm tra Post</h3>
+            <button onclick="testGetPost()">Kiểm tra Post có tồn tại</button>
+            <div id="postResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>4. Kiểm tra GET Comments</h3>
+            <button onclick="testGetComments()">GET Comments</button>
+            <div id="getCommentsResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>5. Kiểm tra POST Comments (không auth)</h3>
+            <button onclick="testPostCommentsNoAuth()">POST Comments (No Auth)</button>
+            <div id="postCommentsNoAuthResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>6. Kiểm tra POST Comments (có auth)</h3>
+            <textarea id="commentContent" placeholder="Nội dung comment...">Test comment từ tool</textarea>
+            <button onclick="testPostCommentsWithAuth()">POST Comments (With Auth)</button>
+            <div id="postCommentsWithAuthResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>7. Chạy tất cả tests</h3>
+            <button onclick="runAllTests()">Chạy tất cả</button>
+            <div id="allTestsResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        function getApiUrl() {
+            return document.getElementById('apiUrl').value.trim();
+        }
+        
+        function getPostId() {
+            return document.getElementById('postId').value.trim();
+        }
+        
+        function getFirebaseToken() {
+            return document.getElementById('firebaseToken').value.trim();
+        }
+        
+        function loadTokenFromStorage() {
+            // Thử lấy token từ localStorage (nếu app đã lưu)
+            const token = localStorage.getItem('firebase_token') || 
+                         localStorage.getItem('auth_token') ||
+                         sessionStorage.getItem('firebase_token');
+            
+            if (token) {
+                document.getElementById('firebaseToken').value = token;
+                showResult('firebaseToken', '✅ Đã lấy token từ storage', 'success');
+            } else {
+                showResult('firebaseToken', '⚠️ Không tìm thấy token trong storage. Vui lòng paste token thủ công.', 'warning');
+            }
+        }
+        
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+            element.innerHTML = `<span class="${className}">${message}</span>`;
+        }
+        
+        function showResultJson(elementId, data, type = 'info') {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+            element.innerHTML = `<span class="${className}">${JSON.stringify(data, null, 2)}</span>`;
+        }
+        
+        async function testHealth() {
+            const apiUrl = getApiUrl();
+            showResult('healthResult', 'Đang kiểm tra...', 'info');
+            
+            try {
+                const response = await fetch(`${apiUrl}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResultJson('healthResult', {
+                        status: '✅ Backend đang chạy',
+                        data: data
+                    }, 'success');
+                } else {
+                    showResultJson('healthResult', {
+                        status: '❌ Backend có vấn đề',
+                        statusCode: response.status,
+                        data: data
+                    }, 'error');
+                }
+            } catch (error) {
+                showResultJson('healthResult', {
+                    status: '❌ Không thể kết nối đến backend',
+                    error: error.message
+                }, 'error');
+            }
+        }
+        
+        async function testGetPost() {
+            const apiUrl = getApiUrl();
+            const postId = getPostId();
+            showResult('postResult', 'Đang kiểm tra...', 'info');
+            
+            try {
+                const response = await fetch(`${apiUrl}/api/posts/${postId}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResultJson('postResult', {
+                        status: '✅ Post tồn tại',
+                        statusCode: response.status,
+                        post: {
+                            id: data.id,
+                            content: data.content?.substring(0, 50) + '...',
+                            author_name: data.author_name
+                        }
+                    }, 'success');
+                } else if (response.status === 404) {
+                    showResultJson('postResult', {
+                        status: '❌ Post KHÔNG tồn tại (404)',
+                        statusCode: response.status,
+                        detail: data.detail || data
+                    }, 'error');
+                } else {
+                    showResultJson('postResult', {
+                        status: '⚠️ Lỗi không mong đợi',
+                        statusCode: response.status,
+                        data: data
+                    }, 'error');
+                }
+            } catch (error) {
+                showResultJson('postResult', {
+                    status: '❌ Lỗi khi gọi API',
+                    error: error.message
+                }, 'error');
+            }
+        }
+        
+        async function testGetComments() {
+            const apiUrl = getApiUrl();
+            const postId = getPostId();
+            showResult('getCommentsResult', 'Đang kiểm tra...', 'info');
+            
+            try {
+                const response = await fetch(`${apiUrl}/api/posts/${postId}/comments?limit=50`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResultJson('getCommentsResult', {
+                        status: '✅ GET Comments thành công',
+                        statusCode: response.status,
+                        commentsCount: Array.isArray(data) ? data.length : 0,
+                        comments: Array.isArray(data) ? data.slice(0, 3) : data
+                    }, 'success');
+                } else if (response.status === 404) {
+                    showResultJson('getCommentsResult', {
+                        status: '❌ Endpoint trả về 404',
+                        statusCode: response.status,
+                        detail: data.detail || data
+                    }, 'error');
+                } else {
+                    showResultJson('getCommentsResult', {
+                        status: '⚠️ Lỗi không mong đợi',
+                        statusCode: response.status,
+                        data: data
+                    }, 'error');
+                }
+            } catch (error) {
+                showResultJson('getCommentsResult', {
+                    status: '❌ Lỗi khi gọi API',
+                    error: error.message
+                }, 'error');
+            }
+        }
+        
+        async function testPostCommentsNoAuth() {
+            const apiUrl = getApiUrl();
+            const postId = getPostId();
+            showResult('postCommentsNoAuthResult', 'Đang kiểm tra...', 'info');
+            
+            try {
+                const response = await fetch(`${apiUrl}/api/posts/${postId}/comments`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        content: 'Test comment không có auth'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.status === 401) {
+                    showResultJson('postCommentsNoAuthResult', {
+                        status: '✅ Endpoint yêu cầu auth (đúng như mong đợi)',
+                        statusCode: response.status,
+                        detail: data.detail || data
+                    }, 'success');
+                } else if (response.status === 404) {
+                    showResultJson('postCommentsNoAuthResult', {
+                        status: '❌ Endpoint trả về 404 (có thể post không tồn tại)',
+                        statusCode: response.status,
+                        detail: data.detail || data
+                    }, 'error');
+                } else {
+                    showResultJson('postCommentsNoAuthResult', {
+                        status: '⚠️ Status code không mong đợi',
+                        statusCode: response.status,
+                        data: data
+                    }, 'error');
+                }
+            } catch (error) {
+                showResultJson('postCommentsNoAuthResult', {
+                    status: '❌ Lỗi khi gọi API',
+                    error: error.message
+                }, 'error');
+            }
+        }
+        
+        async function testPostCommentsWithAuth() {
+            const apiUrl = getApiUrl();
+            const postId = getPostId();
+            const token = getFirebaseToken();
+            const content = document.getElementById('commentContent').value.trim();
+            
+            if (!token) {
+                showResult('postCommentsWithAuthResult', '⚠️ Vui lòng nhập Firebase token', 'warning');
+                return;
+            }
+            
+            if (!content) {
+                showResult('postCommentsWithAuthResult', '⚠️ Vui lòng nhập nội dung comment', 'warning');
+                return;
+            }
+            
+            showResult('postCommentsWithAuthResult', 'Đang kiểm tra...', 'info');
+            
+            try {
+                const response = await fetch(`${apiUrl}/api/posts/${postId}/comments`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        content: content
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResultJson('postCommentsWithAuthResult', {
+                        status: '✅ Tạo comment thành công!',
+                        statusCode: response.status,
+                        comment: data
+                    }, 'success');
+                } else if (response.status === 404) {
+                    showResultJson('postCommentsWithAuthResult', {
+                        status: '❌ Endpoint trả về 404',
+                        statusCode: response.status,
+                        detail: data.detail || data,
+                        possibleCauses: [
+                            'Post không tồn tại trong database',
+                            'Post ID không đúng',
+                            'Backend chưa được restart sau khi deploy'
+                        ]
+                    }, 'error');
+                } else if (response.status === 401) {
+                    showResultJson('postCommentsWithAuthResult', {
+                        status: '❌ Token không hợp lệ hoặc hết hạn',
+                        statusCode: response.status,
+                        detail: data.detail || data
+                    }, 'error');
+                } else {
+                    showResultJson('postCommentsWithAuthResult', {
+                        status: '⚠️ Lỗi không mong đợi',
+                        statusCode: response.status,
+                        data: data
+                    }, 'error');
+                }
+            } catch (error) {
+                showResultJson('postCommentsWithAuthResult', {
+                    status: '❌ Lỗi khi gọi API',
+                    error: error.message
+                }, 'error');
+            }
+        }
+        
+        async function runAllTests() {
+            showResult('allTestsResult', 'Đang chạy tất cả tests...', 'info');
+            const results = [];
+            
+            // Test 1: Health
+            await testHealth();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Test 2: Get Post
+            await testGetPost();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Test 3: Get Comments
+            await testGetComments();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Test 4: Post Comments No Auth
+            await testPostCommentsNoAuth();
+            
+            showResult('allTestsResult', '✅ Đã chạy xong tất cả tests. Xem kết quả ở trên.', 'success');
+        }
+    </script>
+</body>
+</html>
+

@@ -1,266 +1,300 @@
 /**
- * EduSystem Enterprise - Main App
- * Tích hợp với Backend API và Firebase Auth
+ * Main App Component
+ * Quản lý routing, authentication, và layout chính
  */
-import { useState, useEffect, Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Bell, Search, Menu, Briefcase
-} from 'lucide-react';
+import React, { Suspense, useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Login from './components/Login';
 import ProtectedRoute from './components/ProtectedRoute';
+import Login from './components/Login';
+import RoleSelector from './components/RoleSelector';
+import Navbar from './components/Navbar';
+import Leftbar from './components/Leftbar';
+import Rightbar from './components/Rightbar';
+import Toast from './components/Toast';
 import AnhThoChatFab from './components/AnhThoChatFab';
 import StudentFeed from './components/StudentFeed';
-import Toast from './components/Toast';
-import RoleSelector from './components/RoleSelector';
-import Sidebar from './components/Sidebar';
 
-// Lazy-loaded khu vực ít truy cập hơn để giảm bundle ban đầu
-const StudentExam = lazy(() => import('./components/StudentExam'));
-const StudentLibrary = lazy(() => import('./components/StudentLibrary'));
-const MinistrySchools = lazy(() => import('./components/MinistrySchools'));
-const TeacherGradebook = lazy(() => import('./components/TeacherGradebook'));
-const StudentProfile = lazy(() => import('./components/StudentProfile'));
+// Lazy load các component lớn để tối ưu performance
+const StudentExam = React.lazy(() => import('./components/StudentExam'));
+const StudentLibrary = React.lazy(() => import('./components/StudentLibrary'));
+const StudentProfile = React.lazy(() => import('./components/StudentProfile'));
+const MinistrySchools = React.lazy(() => import('./components/MinistrySchools'));
+const TeacherGradebook = React.lazy(() => import('./components/TeacherGradebook'));
 
-// --- UTILS ---
-const calculateAverage = (scores: any): string => {
-  const { m15, m45, mid, end } = scores;
-  let total = 0;
-  let count = 0;
-  
-  if (m15 !== null) { total += Number(m15); count += 1; }
-  if (m45 !== null) { total += Number(m45) * 2; count += 2; }
-  if (mid !== null) { total += Number(mid) * 2; count += 2; }
-  if (end !== null) { total += Number(end) * 3; count += 3; }
-  
-  if (count === 0) {
-    return '0.0';
-  }
+// Loading component cho Suspense
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-[60vh]">
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+      <p className="text-neutral-500 font-medium">Đang tải...</p>
+    </div>
+  </div>
+);
 
-  return (total / count).toFixed(1);
-};
+// Toast state type
+interface ToastState {
+  message: string;
+  type: 'success' | 'error';
+}
 
-// 7. MAIN APP CONTENT (Inner component that uses hooks)
-const AppContent = () => {
+// Main App Content Component (sau khi đã authenticated)
+const AppContent: React.FC = () => {
   const { currentUser, logout } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
-  const [role, setRole] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [anhThoContext, setAnhThoContext] = useState<string | undefined>(undefined);
+  const navigate = useNavigate();
+  
+  const [role, setRole] = useState<string>('student');
+  const [activeTab, setActiveTab] = useState<string>('feed');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [anhThoContext, setAnhThoContext] = useState<string>('');
 
-  // Helper: map role + tab -> path
-  const getPathForRoleTab = (r: string, tab: string) => {
-    return `/${r}/${tab}`;
-  };
-
-  // Đồng bộ role/tab từ URL hoặc localStorage
+  // Sync URL với activeTab
   useEffect(() => {
-    if (!currentUser) return;
-
-    const segments = location.pathname.split('/').filter(Boolean);
-    if (segments.length >= 2) {
-      const [r, tab] = segments as [string, string];
-      setRole(r);
+    const path = location.pathname;
+    if (path.startsWith('/student/')) {
+      const tab = path.split('/student/')[1] || 'feed';
       setActiveTab(tab);
-      localStorage.setItem('userRole', r);
-      return;
+      setRole('student');
+    } else if (path.startsWith('/teacher/')) {
+      const tab = path.split('/teacher/')[1] || 'dashboard';
+      setActiveTab(tab);
+      setRole('teacher');
+    } else if (path.startsWith('/ministry/')) {
+      const tab = path.split('/ministry/')[1] || 'dashboard';
+      setActiveTab(tab);
+      setRole('ministry');
+    } else if (path.startsWith('/school/')) {
+      const tab = path.split('/school/')[1] || 'dashboard';
+      setActiveTab(tab);
+      setRole('school');
     }
+  }, [location]);
 
-    // Fallback: lấy từ localStorage nếu chưa có role
-    if (!role) {
-      const savedRole = localStorage.getItem('userRole');
-      if (savedRole) {
-        const defaultTab = savedRole === 'student' ? 'feed' : 'dashboard';
-        setRole(savedRole);
-        setActiveTab(defaultTab);
-        navigate(getPathForRoleTab(savedRole, defaultTab), { replace: true });
-      }
-    }
-  }, [currentUser, role, location.pathname]);
-
-  const applyRole = (r: string) => {
-    setRole(r);
-    const defaultTab = r === 'student' ? 'feed' : 'dashboard';
-    setActiveTab(defaultTab);
-    localStorage.setItem('userRole', r);
-    navigate(getPathForRoleTab(r, defaultTab), { replace: true });
-  };
-
-  const handleTabChange = (tab: string) => {
-    if (!role) return;
-    setActiveTab(tab);
-    navigate(getPathForRoleTab(role, tab));
-  };
-
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
+  const showToast = (msg: string, type: 'success' | 'error') => {
+    setToast({ message: msg, type });
     setTimeout(() => setToast(null), 3000);
   };
 
   const handleLogout = async () => {
     try {
       await logout();
-      setRole(null);
-      localStorage.removeItem('userRole'); // Xóa role khi logout
       navigate('/login');
     } catch (error: any) {
-      showToast('Lỗi đăng xuất: ' + error.message, 'error');
+      showToast('Đăng xuất thất bại: ' + error.message, 'error');
     }
   };
 
-  if (!currentUser) {
-    return null; // Will redirect to login
-  }
+  const applyRole = (selectedRole: string) => {
+    setRole(selectedRole);
+    setActiveTab('dashboard');
+    navigate(`/${selectedRole}/dashboard`);
+  };
 
-  if (!role) {
-    return <RoleSelector onSelect={(r) => { 
-      applyRole(r);
-    }} />;
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    navigate(`/${role}/${tab}`);
+  };
+
+  const calculateAverage = (scores: any): string => {
+    const { m15, m45, mid, end } = scores;
+    const weights = { m15: 0.1, m45: 0.2, mid: 0.3, end: 0.4 };
+    let total = 0;
+    let weightSum = 0;
+
+    if (m15 !== null && m15 !== undefined) {
+      total += m15 * weights.m15;
+      weightSum += weights.m15;
+    }
+    if (m45 !== null && m45 !== undefined) {
+      total += m45 * weights.m45;
+      weightSum += weights.m45;
+    }
+    if (mid !== null && mid !== undefined) {
+      total += mid * weights.mid;
+      weightSum += weights.mid;
+    }
+    if (end !== null && end !== undefined) {
+      total += end * weights.end;
+      weightSum += weights.end;
+    }
+
+    if (weightSum === 0) return 'N/A';
+    return (total / weightSum).toFixed(1);
+  };
+
+  // Nếu chưa chọn role, hiển thị RoleSelector
+  if (!role || role === '') {
+    return <RoleSelector onSelect={applyRole} />;
   }
 
   return (
-    <div className="min-h-screen bg-[#F1F5F9] font-sans text-slate-800 flex">
-      <Sidebar 
-        role={role} 
-        activeTab={activeTab} 
-        setActiveTab={handleTabChange} 
-        mobileOpen={mobileOpen} 
-        setMobileOpen={setMobileOpen} 
-        onLogout={handleLogout} 
+    <div className="min-h-screen bg-neutral-50">
+      {/* Navbar - Fixed top */}
+      <Navbar
+        onMenuClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        onLogout={handleLogout}
       />
-      
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        {/* Header */}
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-30 shrink-0">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg">
-              <Menu size={24}/>
-            </button>
-            <h2 className="font-bold text-xl text-slate-800 capitalize hidden sm:block">
-              {role === 'ministry' ? 'Cổng thông tin Bộ Giáo Dục' : 
-               role === 'school' ? 'Cổng thông tin Nhà Trường' : 
-               role === 'teacher' ? 'Không gian Giáo Viên' : 
-               'Góc học tập'}
-            </h2>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* Quick role switcher */}
-            <select
-              value={role}
-              onChange={(e) => applyRole(e.target.value)}
-              className="hidden md:block bg-slate-100 border border-slate-200 text-xs rounded-full px-3 py-1 text-slate-600 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="student">Học sinh</option>
-              <option value="teacher">Giáo viên</option>
-              <option value="school">Nhà trường</option>
-              <option value="ministry">Bộ GD</option>
-            </select>
 
-            <div className="hidden md:flex items-center bg-slate-100 rounded-full px-4 py-2 w-64">
-              <Search size={18} className="text-slate-400 mr-2"/>
-              <input placeholder="Tìm kiếm..." className="bg-transparent w-full outline-none text-sm"/>
+      {/* Main Layout - Responsive Design */}
+      <div className="pt-14 flex relative">
+        {/* Leftbar - Fixed left (tablet & desktop) */}
+        <div className="hidden lg:block fixed left-0 top-14 bottom-0 z-30">
+          <Leftbar
+            role={role}
+            activeTab={activeTab}
+            setActiveTab={handleTabChange}
+            onLogout={handleLogout}
+          />
+        </div>
+
+        {/* Mobile menu overlay */}
+        {mobileMenuOpen && (
+          <>
+            <div
+              className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm animate-fade-in"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <div className="fixed left-0 top-14 bottom-0 w-[280px] sm:w-[320px] bg-white z-50 lg:hidden overflow-y-auto shadow-large border-r border-neutral-200 animate-slide-right scrollbar-thin">
+              <Leftbar
+                role={role}
+                activeTab={activeTab}
+                setActiveTab={(tab) => {
+                  handleTabChange(tab);
+                  setMobileMenuOpen(false);
+                }}
+                onLogout={handleLogout}
+              />
             </div>
-            <button className="relative p-2 bg-slate-100 rounded-full hover:bg-indigo-50 hover:text-indigo-600 transition">
-              <Bell size={20}/>
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-            </button>
-            <div className="w-9 h-9 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold cursor-pointer shadow-md">
-              {currentUser.displayName?.charAt(0) || currentUser.email?.charAt(0) || 'U'}
-            </div>
-          </div>
-        </header>
+          </>
+        )}
 
-        {/* Content Scrollable Area */}
-        <main className="flex-1 p-6 overflow-y-auto">
-          <div className="max-w-7xl mx-auto">
-            <Suspense fallback={<div className="p-10 text-center text-slate-400">Đang tải nội dung...</div>}>
-            {/* Student Views */}
-              {role === 'student' && activeTab === 'feed' && (
-                <StudentFeed showToast={showToast} onAskWithContext={setAnhThoContext} />
-              )}
-              {role === 'student' && activeTab === 'exams' && (
-                <StudentExam showToast={showToast} />
-              )}
-              {role === 'student' && activeTab === 'library' && (
-                <StudentLibrary showToast={showToast} />
-              )}
-              {role === 'student' && activeTab === 'profile' && (
-                <StudentProfile showToast={showToast} />
-              )}
+        {/* Main Content - Center */}
+        <main className="flex-1 min-h-[calc(100vh-3.5rem)] overflow-y-auto lg:ml-[360px] xl:mr-[360px] scrollbar-thin">
+          <div className="max-w-full lg:max-w-[680px] xl:max-w-[800px] mx-auto pt-4 sm:pt-6 px-3 sm:px-4 md:px-6 pb-8">
 
-            {/* Ministry Views */}
-              {role === 'ministry' && activeTab === 'schools' && (
-                <MinistrySchools showToast={showToast} />
+          {/* Content based on role and tab */}
+          {role === 'student' && (
+            <>
+              {activeTab === 'feed' && (
+                <StudentFeed
+                  showToast={showToast}
+                  onAskWithContext={(context) => {
+                    setAnhThoContext(context);
+                  }}
+                />
               )}
-            {role === 'ministry' && activeTab === 'dashboard' && (
-                <div className="p-10 text-center text-slate-400">
-                  Dashboard Bộ Giáo Dục (Demo Charts)
-                </div>
-            )}
-            {role === 'ministry' && activeTab === 'policies' && (
-              <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
-                  <Briefcase size={48} className="mb-4 opacity-50" />
-                  <p>
-                    Tính năng <b>policies</b> đang được phát triển
-                  </p>
-              </div>
-            )}
-
-            {/* School Views */}
-            {role === 'school' && activeTab === 'dashboard' && (
-              <div className="p-10 text-center text-slate-400">Dashboard Nhà Trường</div>
-            )}
-            {role === 'school' && activeTab === 'teachers' && (
-              <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
-                  <Briefcase size={48} className="mb-4 opacity-50" />
-                  <p>
-                    Tính năng <b>teachers</b> đang được phát triển
-                  </p>
-              </div>
-            )}
-            {role === 'school' && activeTab === 'classes' && (
-              <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
-                  <Briefcase size={48} className="mb-4 opacity-50" />
-                  <p>
-                    Tính năng <b>classes</b> đang được phát triển
-                  </p>
-              </div>
-            )}
-
-            {/* Teacher Views */}
-              {role === 'teacher' && activeTab === 'gradebook' && (
-                <TeacherGradebook showToast={showToast} calculateAverage={calculateAverage} />
+              {activeTab === 'exams' && (
+                <Suspense fallback={<LoadingFallback />}>
+                  <StudentExam showToast={showToast} />
+                </Suspense>
               )}
-            {role === 'teacher' && activeTab === 'dashboard' && (
-              <div className="p-10 text-center text-slate-400">Dashboard Lớp Chủ Nhiệm</div>
-            )}
-            {role === 'teacher' && activeTab === 'students' && (
-              <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
-                  <Briefcase size={48} className="mb-4 opacity-50" />
-                  <p>
-                    Tính năng <b>students</b> đang được phát triển
-                  </p>
-              </div>
-            )}
-            </Suspense>
+              {activeTab === 'library' && (
+                <Suspense fallback={<LoadingFallback />}>
+                  <StudentLibrary showToast={showToast} />
+                </Suspense>
+              )}
+              {activeTab === 'profile' && (
+                <Suspense fallback={<LoadingFallback />}>
+                  <StudentProfile showToast={showToast} />
+                </Suspense>
+              )}
+            </>
+          )}
+
+          {role === 'teacher' && (
+            <>
+              {activeTab === 'dashboard' && (
+                <Card className="animate-fade-in">
+                  <h1 className="text-2xl font-display font-bold text-neutral-900 mb-2">Chủ nhiệm</h1>
+                  <p className="text-neutral-600">Chào mừng giáo viên!</p>
+                </Card>
+              )}
+              {activeTab === 'gradebook' && (
+                <Suspense fallback={<LoadingFallback />}>
+                  <TeacherGradebook showToast={showToast} calculateAverage={calculateAverage} />
+                </Suspense>
+              )}
+              {activeTab === 'students' && (
+                <Card className="animate-fade-in">
+                  <h1 className="text-2xl font-display font-bold text-neutral-900 mb-2">Quản lý Học sinh</h1>
+                  <p className="text-neutral-600">Danh sách học sinh...</p>
+                </Card>
+              )}
+            </>
+          )}
+
+          {role === 'ministry' && (
+            <>
+              {activeTab === 'dashboard' && (
+                <Card className="animate-fade-in">
+                  <h1 className="text-2xl font-display font-bold text-neutral-900 mb-2">Tổng quan</h1>
+                  <p className="text-neutral-600">Dashboard Bộ Giáo Dục...</p>
+                </Card>
+              )}
+              {activeTab === 'schools' && (
+                <Suspense fallback={<LoadingFallback />}>
+                  <MinistrySchools showToast={showToast} />
+                </Suspense>
+              )}
+              {activeTab === 'policies' && (
+                <Card className="animate-fade-in">
+                  <h1 className="text-2xl font-display font-bold text-neutral-900 mb-2">Chính sách</h1>
+                  <p className="text-neutral-600">Quản lý chính sách...</p>
+                </Card>
+              )}
+            </>
+          )}
+
+          {role === 'school' && (
+            <>
+              {activeTab === 'dashboard' && (
+                <Card className="animate-fade-in">
+                  <h1 className="text-2xl font-display font-bold text-neutral-900 mb-2">Dashboard Nhà Trường</h1>
+                  <p className="text-neutral-600">Quản lý trường học...</p>
+                </Card>
+              )}
+              {activeTab === 'teachers' && (
+                <Card className="animate-fade-in">
+                  <h1 className="text-2xl font-display font-bold text-neutral-900 mb-2">Quản lý Giáo viên</h1>
+                  <p className="text-neutral-600">Danh sách giáo viên...</p>
+                </Card>
+              )}
+              {activeTab === 'classes' && (
+                <Card className="animate-fade-in">
+                  <h1 className="text-2xl font-display font-bold text-neutral-900 mb-2">Quản lý Lớp học</h1>
+                  <p className="text-neutral-600">Danh sách lớp học...</p>
+                </Card>
+              )}
+            </>
+          )}
           </div>
         </main>
+
+        {/* Rightbar - Fixed right (desktop only) */}
+        <div className="hidden xl:block fixed right-0 top-14 bottom-0">
+          <Rightbar role={role} />
+        </div>
       </div>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
 
-      {/* Nút FAB chat Anh Thơ Live */}
+      {/* Anh Thơ Chat FAB */}
       <AnhThoChatFab contextText={anhThoContext} />
     </div>
   );
 };
 
-// 8. MAIN APP WRAPPER (with Router and AuthProvider)
-const App = () => {
+// Main App Component với Router
+const App: React.FC = () => {
   return (
     <AuthProvider>
       <Router
@@ -292,3 +326,4 @@ const App = () => {
 };
 
 export default App;
+
