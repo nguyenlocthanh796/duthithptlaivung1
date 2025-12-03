@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
-import { apiRequest } from '../services/api';
+import { apiRequest } from '../../services/api';
 import RichTextMessage from './RichTextMessage';
 
 interface ChatMessage {

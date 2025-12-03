@@ -5,7 +5,7 @@
  */
 import React, { useState, ChangeEvent } from 'react';
 import imageCompression from 'browser-image-compression';
-import { postsAPI, PostCreate } from '../services/api';
+import { postsAPI, PostCreate } from '../../services/api';
 
 const CreatePost: React.FC = () => {
   const [content, setContent] = useState('');

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState, ChangeEvent, FormEvent } from 'react';
-import { Home, MessageCircle, Filter as FilterIcon, Image as ImageIcon, Send, Trash2, MoreHorizontal, FileText, X, Edit2, Check, Loader2, ThumbsUp } from 'lucide-react';
+import { Home, MessageCircle, Filter as FilterIcon, Image as ImageIcon, Send, Trash2, MoreHorizontal, FileText, X, Edit2, Check, Loader2, ThumbsUp, Calculator } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
-import { Post, PostCreate, postsAPI, Comment, commentsAPI, Attachment, uploadsAPI } from '../services/api';
-import { Card, Badge, Button } from './ui';
+import { Post, PostCreate, postsAPI, Comment, commentsAPI, Attachment, uploadsAPI } from '../../services/api';
+import { Card, Badge, Button } from '../ui';
+import { MathText, MathEditor } from '../math';
 
 interface StudentFeedProps {
   showToast: (msg: string, type: 'success' | 'error') => void;
@@ -22,6 +23,8 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
   // Composer state
   const [content, setContent] = useState('');
   const [subject, setSubject] = useState('toan');
+  const [showMathEditor, setShowMathEditor] = useState(false);
+  const [mathFormula, setMathFormula] = useState('');
   // Mới: hỗ trợ nhiều ảnh (tối đa 5)
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -134,7 +137,7 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
       setPosts((prev) => prev.map((p) => (p.id === postId ? updatedPost : p)));
     } catch (error: any) {
       // Chỉ log trong development
-      if (import.meta.env.DEV) {
+      if ((import.meta as any).env?.DEV) {
         console.error('Error reloading post:', error);
       }
       // Không throw error để không làm gián đoạn UI
@@ -210,7 +213,7 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
       );
       showToast('Đã gửi bình luận', 'success');
     } catch (error: any) {
-      if (import.meta.env.DEV) {
+      if ((import.meta as any).env?.DEV) {
         console.error('Error creating comment:', error);
       }
       // Xử lý các loại lỗi cụ thể
@@ -244,7 +247,7 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
       );
       showToast('Đã xoá bình luận', 'success');
     } catch (error: any) {
-      if (import.meta.env.DEV) {
+      if ((import.meta as any).env?.DEV) {
         console.error('Error deleting comment:', error);
       }
       const errorMessage = error.message || 'Lỗi không xác định';
@@ -284,7 +287,7 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
       cancelEditComment();
       showToast('Đã cập nhật bình luận', 'success');
     } catch (error: any) {
-      if (import.meta.env.DEV) {
+      if ((import.meta as any).env?.DEV) {
         console.error('Error updating comment:', error);
       }
       const errorMessage = error.message || 'Lỗi không xác định';
@@ -554,6 +557,41 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
               ))}
             </div>
           )}
+
+          {/* Math Editor */}
+          {showMathEditor && (
+            <div className="mt-4 p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-neutral-700">Công thức toán học</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (mathFormula) {
+                      // Chèn công thức vào content
+                      const formula = mathFormula.trim();
+                      const mathBlock = `$$${formula}$$`;
+                      setContent((prev) => prev + (prev ? '\n\n' : '') + mathBlock);
+                      setMathFormula('');
+                    }
+                    setShowMathEditor(false);
+                  }}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Chèn vào bài viết
+                </button>
+              </div>
+              <MathEditor
+                value={mathFormula}
+                onChange={setMathFormula}
+                placeholder="Nhập công thức toán học..."
+                inline={false}
+                className="w-full"
+              />
+              <div className="mt-2 text-xs text-neutral-500">
+                Tip: Nhập công thức và nhấn "Chèn vào bài viết" để thêm vào nội dung
+              </div>
+            </div>
+          )}
         </div>
         
           {/* Thanh công cụ Modern */}
@@ -573,19 +611,35 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
               <option value="anh">🌐 Anh</option>
             </select>
               <div className="h-6 w-px bg-neutral-300" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowMathEditor(!showMathEditor);
+                }}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition text-sm font-medium ${
+                  showMathEditor
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'hover:bg-neutral-100 text-neutral-700'
+                }`}
+              >
+                <Calculator size={18} className="text-primary-600" />
+                <span className="hidden sm:inline">Công thức</span>
+              </button>
+              <div className="h-6 w-px bg-neutral-300" />
               <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-neutral-100 cursor-pointer transition text-neutral-700 text-sm font-medium">
                 <ImageIcon size={18} className="text-success-600" />
-              <span className="hidden sm:inline">Ảnh</span>
+                <span className="hidden sm:inline">Ảnh</span>
                 {imageFiles.length > 0 && <Badge variant="primary" size="sm">{imageFiles.length}/5</Badge>}
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={handleImageChange}
-                disabled={creating || imageFiles.length >= 5}
-              />
-            </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleImageChange}
+                  disabled={creating || imageFiles.length >= 5}
+                />
+              </label>
               <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-neutral-100 cursor-pointer transition text-neutral-700 text-sm font-medium">
                 <FileText size={18} className="text-primary-600" />
               <span className="hidden sm:inline">Tài liệu</span>
@@ -770,11 +824,11 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="mt-3">
-                  <p className="text-[15px] text-neutral-900 leading-[1.6] whitespace-pre-wrap break-words">
-                  {post.content}
-                </p>
+              ) : (
+                <div className="mt-3">
+                  <div className="text-[15px] text-neutral-900 leading-[1.6] break-words">
+                    <MathText content={post.content} />
+                  </div>
                 {(post.subject || (post.aiTags && post.aiTags.length > 0)) && (
                     <div className="flex flex-wrap gap-2 mt-3">
                     {post.subject && (
@@ -861,7 +915,7 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
                 {post.attachments.map((att, idx) => (
                   <a
                     key={idx}
-                    href={`${import.meta.env.VITE_API_URL || 'http://35.223.145.48:8000'}${att.url}`}
+                    href={`${(import.meta as any).env?.VITE_API_URL || 'http://35.223.145.48:8000'}${att.url}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200 hover:bg-neutral-100 hover:border-primary-300 transition-all group"
@@ -1029,7 +1083,9 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
                     <Badge variant="primary" size="sm">AI</Badge>
                     <span className="text-xs text-neutral-500">Trợ lý học tập</span>
                   </div>
-                  <p className="text-sm text-neutral-900 leading-relaxed">{post.aiComment}</p>
+                  <div className="text-sm text-neutral-900 leading-relaxed">
+                    <MathText content={post.aiComment} />
+                  </div>
                 </div>
               </div>
             )}
@@ -1106,7 +1162,13 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
                               <textarea
                                 value={editingCommentContent}
                                 onChange={(e) => setEditingCommentContent(e.target.value)}
-                                className="w-full min-h-[60px] max-h-32 resize-y border border-[#1877F2] rounded-lg px-3 py-2 text-[15px] outline-none focus:ring-2 focus:ring-[#1877F2] bg-white text-[#050505]"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') {
+                                    e.stopPropagation();
+                                    cancelEditComment();
+                                  }
+                                }}
+                                className="w-full min-h-[60px] max-h-32 resize-y border border-primary-600 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary-500 bg-white text-neutral-900"
                                 autoFocus
                               />
                               <div className="flex items-center gap-2">
@@ -1191,8 +1253,8 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
                                   </div>
                           )}
                         </div>
-                              <div className="text-sm text-neutral-900 leading-relaxed whitespace-pre-wrap break-words">
-                                {c.content}
+                              <div className="text-sm text-neutral-900 leading-relaxed break-words">
+                                <MathText content={c.content} />
                               </div>
                             </div>
                           )}

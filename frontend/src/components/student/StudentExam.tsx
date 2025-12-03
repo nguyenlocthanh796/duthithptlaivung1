@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, Clock, FileText, Target, Trophy } from 'lucide-react';
-import { Exam, examsAPI } from '../services/api';
+import { Exam, examsAPI } from '../../services/api';
 
 interface StudentExamProps {
   showToast: (msg: string, type: 'success' | 'error') => void;

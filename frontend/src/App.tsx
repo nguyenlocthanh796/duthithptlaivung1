@@ -5,22 +5,18 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import Login from './components/Login';
-import RoleSelector from './components/RoleSelector';
-import Navbar from './components/Navbar';
-import Leftbar from './components/Leftbar';
-import Rightbar from './components/Rightbar';
-import Toast from './components/Toast';
-import AnhThoChatFab from './components/AnhThoChatFab';
-import StudentFeed from './components/StudentFeed';
+import { ProtectedRoute, Login, RoleSelector } from './components/auth';
+import { Navbar, Leftbar, Rightbar } from './components/layout';
+import { Toast, AnhThoChatFab } from './components/common';
+import { StudentFeed } from './components/feed';
+import { Card } from './components/ui';
 
 // Lazy load các component lớn để tối ưu performance
-const StudentExam = React.lazy(() => import('./components/StudentExam'));
-const StudentLibrary = React.lazy(() => import('./components/StudentLibrary'));
-const StudentProfile = React.lazy(() => import('./components/StudentProfile'));
-const MinistrySchools = React.lazy(() => import('./components/MinistrySchools'));
-const TeacherGradebook = React.lazy(() => import('./components/TeacherGradebook'));
+const StudentExam = React.lazy(() => import('./components/student/StudentExam'));
+const StudentLibrary = React.lazy(() => import('./components/student/StudentLibrary'));
+const StudentProfile = React.lazy(() => import('./components/student/StudentProfile'));
+const MinistrySchools = React.lazy(() => import('./components/ministry/MinistrySchools'));
+const TeacherGradebook = React.lazy(() => import('./components/teacher/TeacherGradebook'));
 
 // Loading component cho Suspense
 const LoadingFallback = () => (
@@ -40,7 +36,7 @@ interface ToastState {
 
 // Main App Content Component (sau khi đã authenticated)
 const AppContent: React.FC = () => {
-  const { currentUser, logout } = useAuth();
+  const { logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -274,7 +270,7 @@ const AppContent: React.FC = () => {
 
         {/* Rightbar - Fixed right (desktop only) */}
         <div className="hidden xl:block fixed right-0 top-14 bottom-0">
-          <Rightbar role={role} />
+        <Rightbar role={role} />
         </div>
       </div>
 

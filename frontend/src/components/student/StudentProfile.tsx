@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { meAPI } from '../services/api';
+import { meAPI } from '../../services/api';
 import { Home, Activity } from 'lucide-react';
 
 interface StudentProfileProps {

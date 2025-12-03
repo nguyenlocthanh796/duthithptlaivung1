@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, Download, FileText } from 'lucide-react';
-import { Document, documentsAPI } from '../services/api';
+import { Document, documentsAPI } from '../../services/api';
 
 interface StudentLibraryProps {
   showToast: (msg: string, type: 'success' | 'error') => void;

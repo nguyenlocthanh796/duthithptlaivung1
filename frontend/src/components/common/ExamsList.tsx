@@ -3,7 +3,7 @@
  * Ví dụ cách sử dụng examsAPI
  */
 import React, { useState, useEffect } from 'react';
-import { examsAPI, Exam } from '../services/api';
+import { examsAPI, Exam } from '../../services/api';
 
 const ExamsList: React.FC = () => {
   const [exams, setExams] = useState<Exam[]>([]);

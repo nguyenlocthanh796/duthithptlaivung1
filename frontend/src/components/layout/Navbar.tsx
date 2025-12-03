@@ -3,11 +3,11 @@
  * Thanh điều hướng trên cùng được tối ưu và chia nhỏ thành các component
  */
 import React from 'react';
-import NavbarLogo from './navbar/NavbarLogo';
-import NavbarSearch from './navbar/NavbarSearch';
-import NavbarNav from './navbar/NavbarNav';
-import NavbarActions from './navbar/NavbarActions';
-import NavbarProfile from './navbar/NavbarProfile';
+import NavbarLogo from '../navbar/NavbarLogo';
+import NavbarSearch from '../navbar/NavbarSearch';
+import NavbarNav from '../navbar/NavbarNav';
+import NavbarActions from '../navbar/NavbarActions';
+import NavbarProfile from '../navbar/NavbarProfile';
 
 interface NavbarProps {
   onMenuClick: () => void;

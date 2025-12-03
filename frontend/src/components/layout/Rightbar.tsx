@@ -3,8 +3,8 @@
  * Sidebar bên phải với các thông tin và shortcuts được nâng cấp
  */
 import React from 'react';
-import { Users, BookOpen, Calendar, TrendingUp, MessageCircle, MoreHorizontal, Video } from 'lucide-react';
-import { Card, Badge } from './ui';
+import { BookOpen, Calendar, TrendingUp, MessageCircle, MoreHorizontal, Video } from 'lucide-react';
+import { Card, Badge } from '../ui';
 
 interface RightbarProps {
   role: string;

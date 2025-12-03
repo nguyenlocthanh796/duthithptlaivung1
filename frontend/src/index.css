@@ -168,3 +168,36 @@
   }
 }
 
+/* Math Components Styles */
+.math-display {
+  display: inline-block;
+}
+
+.math-display.block {
+  display: block;
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.math-display.inline {
+  display: inline;
+  vertical-align: baseline;
+}
+
+.math-text {
+  line-height: 1.8;
+}
+
+.math-text .math-display.block {
+  margin: 0.75rem 0;
+}
+
+.math-editor {
+  font-family: 'KaTeX_Main', 'Times New Roman', serif;
+}
+
+.math-editor.focused {
+  border-color: rgb(37 99 235) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+

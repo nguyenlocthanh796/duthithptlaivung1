@@ -2,7 +2,7 @@
  * Component hiển thị thông tin user và nút logout
  */
 import React from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 const UserProfile: React.FC = () => {

@@ -3,7 +3,7 @@
  * Ví dụ cách import và sử dụng API service
  */
 import React, { useState, useEffect } from 'react';
-import { postsAPI, Post } from '../services/api';
+import { postsAPI, Post } from '../../services/api';
 
 const PostsList: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
