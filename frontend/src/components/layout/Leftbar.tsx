@@ -3,7 +3,7 @@
  * Sidebar bên trái với navigation menu được nâng cấp
  */
 import React from 'react';
-import { Home, FileText, BookOpen, Users, BarChart2, Building, LogOut } from 'lucide-react';
+import { Home, FileText, BookOpen, Users, BarChart2, Building, LogOut, Shield, LayoutDashboard } from 'lucide-react';
 
 interface LeftbarProps {
   role: string;
@@ -15,6 +15,12 @@ interface LeftbarProps {
 const Leftbar: React.FC<LeftbarProps> = ({ role, activeTab, setActiveTab, onLogout }) => {
   const getMenu = () => {
     switch (role) {
+      case 'admin':
+        return [
+          { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'from-red-500 to-pink-500' },
+          { id: 'users', label: 'Quản lý Users', icon: Users, color: 'from-blue-500 to-cyan-500' },
+          { id: 'posts', label: 'Quản lý Posts', icon: FileText, color: 'from-green-500 to-emerald-500' },
+        ];
       case 'ministry':
         return [
           { id: 'dashboard', label: 'Tổng quan', icon: BarChart2, color: 'from-blue-500 to-cyan-500' },

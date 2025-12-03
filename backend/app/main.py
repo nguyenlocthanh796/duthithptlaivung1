@@ -1,23 +1,63 @@
 """
-FastAPI main application
+FastAPI main application - Enhanced for future development
 """
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime
 import uvicorn
+import logging
 
 from app.config import settings
 from app.sql_database import db
-from app.routers import exams, posts, ai_chat, documents, ai_feed, ai_analysis, me, uploads
+from app.routers import exams, posts, ai_chat, documents, ai_feed, ai_analysis, me, uploads, users, admin
 
+# Try to import enhanced router
+try:
+    from app.routers.posts_enhanced import router as posts_enhanced_router
+    HAS_ENHANCED_ROUTER = True
+except ImportError:
+    HAS_ENHANCED_ROUTER = False
+
+# Import middleware
+try:
+    from app.middleware.rate_limit import RateLimitMiddleware
+    from app.middleware.logging import LoggingMiddleware
+    from app.middleware.error_handler import (
+        http_exception_handler,
+        validation_exception_handler,
+        general_exception_handler
+    )
+    HAS_MIDDLEWARE = True
+except ImportError:
+    HAS_MIDDLEWARE = False
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("api")
 
 app = FastAPI(
     title="DuThi THPT Backend API",
-    description="Backend API for DuThi THPT Platform with SQL database and Firebase Auth",
-    version="1.0.0"
+    description="Backend API for DuThi THPT Platform with SQL database and Firebase Auth. Enhanced for large-scale data management.",
+    version="2.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+    terms_of_service="https://example.com/terms/",
+    contact={
+        "name": "API Support",
+        "email": "support@example.com",
+    },
+    license_info={
+        "name": "MIT",
+    },
 )
 
 # CORS Middleware
@@ -44,15 +84,39 @@ else:
         allow_headers=["*"],
     )
 
+# Add enhanced middleware
+if HAS_MIDDLEWARE:
+    # Logging middleware (first, to log all requests)
+    app.add_middleware(LoggingMiddleware)
+    
+    # Rate limiting middleware (after logging, before processing)
+    rate_limit_per_minute = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+    rate_limit_per_hour = int(os.getenv("RATE_LIMIT_PER_HOUR", "1000"))
+    app.add_middleware(
+        RateLimitMiddleware,
+        requests_per_minute=rate_limit_per_minute,
+        requests_per_hour=rate_limit_per_hour
+    )
+
+# Enhanced error handlers
+if HAS_MIDDLEWARE:
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, general_exception_handler)
+
 # Include routers
 app.include_router(exams.router)
-app.include_router(posts.router)
+app.include_router(posts.router)  # Original router (backward compatible)
+if HAS_ENHANCED_ROUTER:
+    app.include_router(posts_enhanced_router)  # Enhanced router with better pagination
 app.include_router(ai_chat.router)
 app.include_router(documents.router)
 app.include_router(ai_feed.router)
 app.include_router(ai_analysis.router)
 app.include_router(me.router)
 app.include_router(uploads.router)
+app.include_router(users.router)
+app.include_router(admin.router)
 
 # Pydantic Models
 class DocumentCreate(BaseModel):
@@ -76,24 +140,59 @@ async def root():
     return {
         "message": "DuThi THPT Backend API",
         "status": "online",
-        "version": "1.0.0"
+        "version": "2.0.0",
+        "docs": "/api/docs",
+        "health": "/health"
     }
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Enhanced health check endpoint"""
     try:
         # Test database connection
-        if not db.health_check():
-            raise Exception("Database health check failed")
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "timestamp": datetime.now().isoformat()
+        db_healthy = db.health_check()
+        
+        # Get database stats if available
+        db_stats = {}
+        try:
+            if hasattr(db, 'get_stats'):
+                db_stats = db.get_stats('posts')
+        except:
+            pass
+        
+        health_status = {
+            "status": "healthy" if db_healthy else "degraded",
+            "timestamp": datetime.now().isoformat(),
+            "version": "2.0.0",
+            "services": {
+                "database": "connected" if db_healthy else "disconnected",
+                "api": "operational"
+            }
         }
+        
+        # Check system resources if psutil available
+        try:
+            import psutil
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            memory = psutil.virtual_memory()
+            health_status["system"] = {
+                "cpu_percent": cpu_percent,
+                "memory_percent": memory.percent,
+                "memory_available_mb": round(memory.available / (1024 * 1024), 2)
+            }
+        except ImportError:
+            pass  # psutil not available, skip system stats
+        
+        if db_stats:
+            health_status["database_stats"] = db_stats
+        
+        status_code = 200 if db_healthy else 503
+        return JSONResponse(content=health_status, status_code=status_code)
+        
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Database connection failed: {str(e)}")
+        logger.error(f"Health check failed: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Health check failed: {str(e)}")
 
 
 # Collection Operations

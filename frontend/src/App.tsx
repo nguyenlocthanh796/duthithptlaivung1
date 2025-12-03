@@ -17,6 +17,7 @@ const StudentLibrary = React.lazy(() => import('./components/student/StudentLibr
 const StudentProfile = React.lazy(() => import('./components/student/StudentProfile'));
 const MinistrySchools = React.lazy(() => import('./components/ministry/MinistrySchools'));
 const TeacherGradebook = React.lazy(() => import('./components/teacher/TeacherGradebook'));
+const AdminPanel = React.lazy(() => import('./components/admin/AdminPanel'));
 
 // Loading component cho Suspense
 const LoadingFallback = () => (
@@ -40,6 +41,7 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
+  const { currentUser } = useAuth();
   const [role, setRole] = useState<string>('student');
   const [activeTab, setActiveTab] = useState<string>('feed');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -264,6 +266,16 @@ const AppContent: React.FC = () => {
                 </Card>
               )}
             </>
+          )}
+
+          {role === 'admin' && (
+            <Suspense fallback={<LoadingFallback />}>
+              <AdminPanel
+                showToast={showToast}
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+              />
+            </Suspense>
           )}
           </div>
         </main>

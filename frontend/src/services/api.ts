@@ -210,10 +210,30 @@ export async function apiRequest<T>(
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-      const errorMessage = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+      
+      // Handle standardized error response
+      let errorMessage = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+      if (errorData.error && errorData.error.message) {
+        errorMessage = errorData.error.message;
+      }
+      
+      // Map common HTTP status codes to user-friendly messages
+      if (response.status === 401) {
+        errorMessage = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+      } else if (response.status === 403) {
+        errorMessage = "Bạn không có quyền thực hiện hành động này.";
+      } else if (response.status === 404) {
+        errorMessage = "Không tìm thấy tài nguyên yêu cầu.";
+      } else if (response.status === 429) {
+        errorMessage = "Quá nhiều yêu cầu. Vui lòng thử lại sau.";
+      } else if (response.status >= 500) {
+        errorMessage = "Lỗi máy chủ nội bộ. Vui lòng thử lại sau.";
+      }
+      
       const error = new Error(errorMessage);
       // Lưu status code vào error để có thể kiểm tra sau
       (error as any).status = response.status;
+      (error as any).code = errorData.error?.code;
       throw error;
     }
     

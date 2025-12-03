@@ -1,9 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState, ChangeEvent, FormEvent } from 'react';
-import { Home, MessageCircle, Filter as FilterIcon, Image as ImageIcon, Send, Trash2, MoreHorizontal, FileText, X, Edit2, Check, Loader2, ThumbsUp, Calculator } from 'lucide-react';
+import React, { useEffect, useMemo, useState, ChangeEvent, FormEvent } from 'react';
+import { Home, MessageCircle, Filter as FilterIcon, Image as ImageIcon, Send, Trash2, MoreHorizontal, FileText, X, Edit2, Check, Loader2, ThumbsUp, Calculator, Search } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { Post, PostCreate, postsAPI, Comment, commentsAPI, Attachment, uploadsAPI } from '../../services/api';
+import { postsAPIEnhanced } from '../../services/api-enhanced';
 import { Card, Badge, Button } from '../ui';
 import { MathText, MathEditor } from '../math';
+import { useAuth } from '../../contexts/AuthContext';
+import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
+import { useDebounce } from '../../hooks/useDebounce';
+import { handleAPIError } from '../../utils/errorHandler';
+import { LoadingSpinner, EmptyState } from '../common';
 
 interface StudentFeedProps {
   showToast: (msg: string, type: 'success' | 'error') => void;
@@ -11,14 +17,18 @@ interface StudentFeedProps {
 }
 
 const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }) => {
+  const { currentUser } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [subjectFilter, setSubjectFilter] = useState<string>('all');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const debouncedSearch = useDebounce(searchTerm, 500);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [total, setTotal] = useState(0);
 
   // Composer state
   const [content, setContent] = useState('');
@@ -53,27 +63,67 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
   const [editingContent, setEditingContent] = useState<string>('');
   const [editingSubject, setEditingSubject] = useState<string>('toan');
 
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const PAGE_SIZE = 20;
 
-  const PAGE_SIZE = 5;
+  // Tải posts với enhanced API support
+  const loadPosts = async (reset = false) => {
+    if (loading || loadingMore) return;
 
-  // Tải trang đầu tiên hoặc khi thay đổi bộ lọc
-  useEffect(() => {
-    const loadInitial = async () => {
-      try {
+    try {
+      if (reset) {
         setLoading(true);
-        const data = await postsAPI.getAll({ limit: PAGE_SIZE });
-        setPosts(data);
-        setHasMore(data.length === PAGE_SIZE);
-      } catch (error: any) {
-        showToast('Không thể tải bảng tin: ' + error.message, 'error');
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
+        setOffset(0);
+      } else {
+        setLoadingMore(true);
       }
-    };
-    void loadInitial();
-  }, []);
+
+      // Try enhanced API first
+      try {
+        const response = await postsAPIEnhanced.getAll({
+          subject: subjectFilter !== 'all' ? subjectFilter : undefined,
+          limit: PAGE_SIZE,
+          offset: reset ? 0 : posts.length,
+          search: debouncedSearch || undefined,
+        });
+
+        if (response.success && response.data) {
+          const newPosts = response.data;
+          if (reset) {
+            setPosts(newPosts);
+          } else {
+            setPosts((prev) => [...prev, ...newPosts]);
+          }
+          setHasMore(response.pagination.has_more);
+          setTotal(response.pagination.total);
+        }
+      } catch (enhancedError) {
+        // Fallback to basic API
+        const data = await postsAPI.getAll({
+          subject: subjectFilter !== 'all' ? subjectFilter : undefined,
+          limit: PAGE_SIZE,
+          offset: reset ? 0 : posts.length,
+        });
+        if (reset) {
+          setPosts(data);
+        } else {
+          setPosts((prev) => [...prev, ...data]);
+        }
+        setHasMore(data.length === PAGE_SIZE);
+      }
+    } catch (error: any) {
+      const errorMessage = handleAPIError(error);
+      showToast('Không thể tải bảng tin: ' + errorMessage, 'error');
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Load initial posts
+  useEffect(() => {
+    void loadPosts(true);
+  }, [subjectFilter, debouncedSearch]);
 
   const filteredPosts = useMemo(() => {
     return posts.filter((post) => {
@@ -97,39 +147,17 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
 
   const visiblePosts = filteredPosts;
 
-  const handleLoadMore = async () => {
+  const handleLoadMore = () => {
     if (loadingMore || !hasMore) return;
-    try {
-      setLoadingMore(true);
-      const offset = posts.length;
-      const data = await postsAPI.getAll({ limit: PAGE_SIZE, offset });
-      setPosts((prev) => [...prev, ...data]);
-      setHasMore(data.length === PAGE_SIZE);
-    } catch (error: any) {
-      console.error('Error loading more posts:', error);
-      showToast('Không thể tải thêm bài viết: ' + (error.message || 'Lỗi không xác định'), 'error');
-    } finally {
-      setLoadingMore(false);
-    }
+    void loadPosts(false);
   };
 
-  // Infinite scroll với IntersectionObserver
-  useEffect(() => {
-    const node = loadMoreRef.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          void handleLoadMore();
-        }
-      },
-      { rootMargin: '200px' }
-    );
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-    };
-  }, [loadMoreRef.current, posts.length, hasMore, loadingMore]);
+  // Infinite scroll với custom hook
+  const loadMoreRef = useInfiniteScroll({
+    hasMore,
+    loading: loadingMore,
+    onLoadMore: handleLoadMore,
+  });
 
   const reloadPost = async (postId: string) => {
     try {
@@ -180,21 +208,16 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
     const text = (commentInput[postId] || '').trim();
     if (!text || creatingCommentFor === postId) return;
     
+    if (!currentUser?.uid) {
+      showToast('Vui lòng đăng nhập để bình luận', 'error');
+      return;
+    }
+    
     // Kiểm tra post có tồn tại trong danh sách không
     const postExists = posts.some(p => p.id === postId);
     if (!postExists) {
       showToast('Bài viết không tồn tại. Vui lòng làm mới trang.', 'error');
       return;
-    }
-    
-    // Kiểm tra post tồn tại trên backend trước khi tạo comment
-    try {
-      await postsAPI.getById(postId);
-    } catch (error: any) {
-      if (error.status === 404 || error.message?.includes('404') || error.message?.includes('Not Found')) {
-        showToast('Bài viết không tồn tại trên server. Vui lòng làm mới trang.', 'error');
-        return;
-      }
     }
     
     try {
@@ -213,18 +236,16 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
       );
       showToast('Đã gửi bình luận', 'success');
     } catch (error: any) {
-      if ((import.meta as any).env?.DEV) {
-        console.error('Error creating comment:', error);
-      }
-      // Xử lý các loại lỗi cụ thể
-      if (error.status === 404 || error.message?.includes('404') || error.message?.includes('Not Found')) {
+      const errorMessage = handleAPIError(error);
+      if (error.status === 404) {
         showToast('Không tìm thấy bài viết. Vui lòng làm mới trang.', 'error');
-      } else if (error.status === 401 || error.message?.includes('401') || error.message?.includes('Unauthenticated')) {
+        // Remove post from state if it doesn't exist
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
+      } else if (error.status === 401) {
         showToast('Vui lòng đăng nhập để bình luận.', 'error');
       } else if (error.status === 403) {
         showToast('Bạn không có quyền bình luận.', 'error');
       } else {
-        const errorMessage = error.message || 'Lỗi không xác định';
         showToast('Không thể gửi bình luận: ' + errorMessage, 'error');
       }
     } finally {
@@ -457,25 +478,31 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
 
   const handleDeletePost = async (post: Post) => {
     if (!window.confirm('Xoá bài viết này?')) return;
+    if (!currentUser?.uid) {
+      showToast('Vui lòng đăng nhập để xoá bài viết', 'error');
+      return;
+    }
     try {
       await postsAPI.delete(post.id);
       setPosts((prev) => prev.filter((p) => p.id !== post.id));
       showToast('Đã xoá bài viết', 'success');
     } catch (error: any) {
-      console.error('Error deleting post:', error);
-      showToast('Không thể xoá bài viết: ' + (error.message || 'Lỗi không xác định'), 'error');
+      const errorMessage = handleAPIError(error);
+      if (error.status === 405) {
+        showToast('Phương thức không được phép. Vui lòng thử lại.', 'error');
+      } else if (error.status === 403) {
+        showToast('Bạn không có quyền xoá bài viết này', 'error');
+      } else if (error.status === 404) {
+        showToast('Bài viết không tồn tại', 'error');
+        setPosts((prev) => prev.filter((p) => p.id !== post.id));
+      } else {
+        showToast('Không thể xoá bài viết: ' + errorMessage, 'error');
+      }
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
-          <p className="text-neutral-500 font-medium">Đang tải bảng tin...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner size="lg" text="Đang tải bảng tin..." fullScreen={false} />;
   }
 
   return (
@@ -724,9 +751,11 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
       {visiblePosts.length === 0 ? (
         <Card padding="lg">
           <div className="text-center py-8 text-neutral-500">
-            <FilterIcon size={48} className="mx-auto mb-4 text-neutral-300" />
-            <p className="text-lg font-medium">Không có bài viết phù hợp bộ lọc hiện tại</p>
-            <p className="text-sm mt-2">Thử thay đổi bộ lọc hoặc tạo bài viết mới</p>
+            <EmptyState
+              icon="search"
+              title="Không có bài viết phù hợp"
+              description={searchTerm ? "Thử tìm kiếm với từ khóa khác" : "Thử thay đổi bộ lọc hoặc tạo bài viết mới"}
+            />
         </div>
         </Card>
       ) : (
@@ -946,11 +975,16 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
                     type="button"
                     onClick={async (e) => {
                       e.stopPropagation();
+                      if (!currentUser?.uid) {
+                        showToast('Vui lòng đăng nhập để thích bài viết', 'error');
+                        return;
+                      }
                       try {
-                        await postsAPI.react(post.id, 'idea');
+                        await postsAPI.react(post.id, 'idea', currentUser.uid);
                         await reloadPost(post.id);
                       } catch (error: any) {
-                        showToast('Không thể cập nhật cảm xúc: ' + (error.message || 'Lỗi không xác định'), 'error');
+                        const errorMessage = handleAPIError(error);
+                        showToast('Không thể cập nhật cảm xúc: ' + errorMessage, 'error');
                       }
                     }}
                     className="flex-1 flex items-center justify-center gap-2 h-10 rounded-xl hover:bg-neutral-100 text-neutral-700 transition-all font-medium group"
@@ -999,12 +1033,17 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
                               type="button"
                               onClick={async (e) => {
                                 e.stopPropagation();
+                                if (!currentUser?.uid) {
+                                  showToast('Vui lòng đăng nhập để bày tỏ cảm xúc', 'error');
+                                  return;
+                                }
                                 try {
-                                  await postsAPI.react(post.id, r.key);
+                                  await postsAPI.react(post.id, r.key as "idea" | "thinking" | "resource" | "motivation", currentUser.uid);
                                   await reloadPost(post.id);
                                   setShowReactionsFor(null);
                                 } catch (error: any) {
-                                  showToast('Không thể cập nhật cảm xúc: ' + (error.message || 'Lỗi không xác định'), 'error');
+                                  const errorMessage = handleAPIError(error);
+                                  showToast('Không thể cập nhật cảm xúc: ' + errorMessage, 'error');
                                 }
                               }}
                               className="p-2 rounded-xl hover:bg-neutral-100 transition-all flex flex-col items-center gap-1 min-w-[70px] hover:scale-110"

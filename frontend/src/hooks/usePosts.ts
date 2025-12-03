@@ -1,99 +1,110 @@
 /**
- * Custom React Hook để quản lý Posts
- * Ví dụ cách tạo reusable hook với API service
+ * Custom hook cho quản lý posts với pagination và search
  */
 import { useState, useEffect, useCallback } from 'react';
-import { postsAPI, Post, PostCreate } from '../services/api';
+import { postsAPI, Post } from '../services/api';
+import { postsAPIEnhanced, PostsListParams } from '../services/api-enhanced';
 
 interface UsePostsOptions {
-  subject?: string;
-  authorId?: string;
-  limit?: number;
-  autoLoad?: boolean; // Tự động load khi mount
+  initialLimit?: number;
+  autoLoad?: boolean;
+  filters?: PostsListParams;
 }
 
 export const usePosts = (options: UsePostsOptions = {}) => {
-  const { subject, authorId, limit = 50, autoLoad = true } = options;
-  
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(autoLoad);
-  const [error, setError] = useState<string | null>(null);
+  const { initialLimit = 20, autoLoad = true, filters = {} } = options;
 
-  const loadPosts = useCallback(async () => {
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+
+  const loadPosts = useCallback(async (reset = false) => {
+    if (loading || loadingMore) return;
+
     try {
-      setLoading(true);
+      if (reset) {
+        setLoading(true);
+        setOffset(0);
+      } else {
+        setLoadingMore(true);
+      }
+
       setError(null);
-      
-      const filters: any = { limit };
-      if (subject) filters.subject = subject;
-      if (authorId) filters.author_id = authorId;
-      
-      const data = await postsAPI.getAll(filters);
-      setPosts(data);
+
+      // Try enhanced API first, fallback to basic
+      try {
+        const response = await postsAPIEnhanced.getAll({
+          ...filters,
+          limit: initialLimit,
+          offset: reset ? 0 : offset,
+        });
+
+        if (response.success && response.data) {
+          const newPosts = response.data;
+          if (reset) {
+            setPosts(newPosts);
+          } else {
+            setPosts((prev) => [...prev, ...newPosts]);
+          }
+
+          setHasMore(response.pagination.has_more);
+          setTotal(response.pagination.total);
+          setOffset((prev) => prev + newPosts.length);
+        }
+      } catch (enhancedError) {
+        // Fallback to basic API
+        const data = await postsAPI.getAll({
+          ...filters,
+          limit: initialLimit,
+          offset: reset ? 0 : offset,
+        });
+
+        if (reset) {
+          setPosts(data);
+        } else {
+          setPosts((prev) => [...prev, ...data]);
+        }
+
+        setHasMore(data.length === initialLimit);
+        setOffset((prev) => prev + data.length);
+      }
     } catch (err: any) {
-      setError(err.message || 'Không thể tải danh sách bài viết');
-      console.error('Error loading posts:', err);
+      setError(err.message || 'Failed to load posts');
+      setHasMore(false);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [subject, authorId, limit]);
+  }, [filters, initialLimit, offset, loading, loadingMore]);
+
+  const loadMore = useCallback(() => {
+    if (!hasMore || loading || loadingMore) return;
+    void loadPosts(false);
+  }, [hasMore, loading, loadingMore, loadPosts]);
+
+  const refresh = useCallback(() => {
+    void loadPosts(true);
+  }, [loadPosts]);
 
   useEffect(() => {
     if (autoLoad) {
-      loadPosts();
+      void loadPosts(true);
     }
-  }, [autoLoad, loadPosts]);
-
-  const createPost = useCallback(async (postData: PostCreate) => {
-    try {
-      setError(null);
-      const newPost = await postsAPI.create(postData);
-      // Thêm post mới vào đầu danh sách
-      setPosts(prev => [newPost, ...prev]);
-      return newPost;
-    } catch (err: any) {
-      setError(err.message || 'Không thể tạo bài viết');
-      throw err;
-    }
-  }, []);
-
-  const likePost = useCallback(async (postId: string) => {
-    try {
-      await postsAPI.like(postId);
-      // Cập nhật số like trong danh sách
-      setPosts(prev => prev.map(post => 
-        post.id === postId 
-          ? { ...post, likes: post.likes + 1 }
-          : post
-      ));
-    } catch (err: any) {
-      setError(err.message || 'Không thể like bài viết');
-      throw err;
-    }
-  }, []);
-
-  const reactToPost = useCallback(async (
-    postId: string,
-    reaction: "idea" | "thinking" | "resource" | "motivation"
-  ) => {
-    try {
-      await postsAPI.react(postId, reaction);
-      // Reload để cập nhật reaction counts
-      await loadPosts();
-    } catch (err: any) {
-      setError(err.message || 'Không thể react bài viết');
-      throw err;
-    }
-  }, [loadPosts]);
+  }, [autoLoad]); // Only run on mount
 
   return {
     posts,
     loading,
+    loadingMore,
     error,
-    loadPosts,
-    createPost,
-    likePost,
-    reactToPost,
+    hasMore,
+    total,
+    loadMore,
+    refresh,
+    reload: refresh,
   };
 };
-

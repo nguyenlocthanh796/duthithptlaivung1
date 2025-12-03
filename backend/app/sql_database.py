@@ -229,6 +229,11 @@ class SQLDatabase:
 
 
 # Global database instance
-db = SQLDatabase()
+# Try to use enhanced version if available, fallback to basic
+try:
+    from app.sql_database_enhanced import EnhancedSQLDatabase
+    db = EnhancedSQLDatabase()
+except ImportError:
+    db = SQLDatabase()
 
 
