@@ -3,7 +3,7 @@
  * Sidebar bên trái với navigation menu được nâng cấp
  */
 import React from 'react';
-import { Home, FileText, BookOpen, Users, BarChart2, Building, LogOut, Shield, LayoutDashboard } from 'lucide-react';
+import { Home, FileText, BookOpen, Users, BarChart2, Building, LogOut, LayoutDashboard } from 'lucide-react';
 
 interface LeftbarProps {
   role: string;

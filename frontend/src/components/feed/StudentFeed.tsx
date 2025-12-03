@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, ChangeEvent, FormEvent } from 'react';
-import { Home, MessageCircle, Filter as FilterIcon, Image as ImageIcon, Send, Trash2, MoreHorizontal, FileText, X, Edit2, Check, Loader2, ThumbsUp, Calculator, Search } from 'lucide-react';
+import { Home, MessageCircle, Filter as FilterIcon, Image as ImageIcon, Send, Trash2, MoreHorizontal, FileText, X, Edit2, Check, Loader2, ThumbsUp, Calculator } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { Post, PostCreate, postsAPI, Comment, commentsAPI, Attachment, uploadsAPI } from '../../services/api';
 import { postsAPIEnhanced } from '../../services/api-enhanced';
@@ -24,11 +24,10 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
   const [subjectFilter, setSubjectFilter] = useState<string>('all');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [searchTerm] = useState<string>('');
   const debouncedSearch = useDebounce(searchTerm, 500);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
-  const [total, setTotal] = useState(0);
 
   // Composer state
   const [content, setContent] = useState('');
@@ -72,19 +71,26 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
     try {
       if (reset) {
         setLoading(true);
-        setOffset(0);
       } else {
         setLoadingMore(true);
       }
 
+      // Thêm timeout để tránh stuck ở loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), 10000); // 10 seconds
+      });
+
       // Try enhanced API first
       try {
-        const response = await postsAPIEnhanced.getAll({
-          subject: subjectFilter !== 'all' ? subjectFilter : undefined,
-          limit: PAGE_SIZE,
-          offset: reset ? 0 : posts.length,
-          search: debouncedSearch || undefined,
-        });
+        const response = await Promise.race([
+          postsAPIEnhanced.getAll({
+            subject: subjectFilter !== 'all' ? subjectFilter : undefined,
+            limit: PAGE_SIZE,
+            offset: reset ? 0 : posts.length,
+            search: debouncedSearch || undefined,
+          }),
+          timeoutPromise,
+        ]) as any;
 
         if (response.success && response.data) {
           const newPosts = response.data;
@@ -94,26 +100,52 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
             setPosts((prev) => [...prev, ...newPosts]);
           }
           setHasMore(response.pagination.has_more);
-          setTotal(response.pagination.total);
+        } else {
+          // Nếu response không có data, set empty array
+          if (reset) {
+            setPosts([]);
+          }
+          setHasMore(false);
         }
       } catch (enhancedError) {
         // Fallback to basic API
-        const data = await postsAPI.getAll({
-          subject: subjectFilter !== 'all' ? subjectFilter : undefined,
-          limit: PAGE_SIZE,
-          offset: reset ? 0 : posts.length,
-        });
-        if (reset) {
-          setPosts(data);
-        } else {
-          setPosts((prev) => [...prev, ...data]);
+        try {
+          const data = await Promise.race([
+            postsAPI.getAll({
+              subject: subjectFilter !== 'all' ? subjectFilter : undefined,
+              limit: PAGE_SIZE,
+              offset: reset ? 0 : posts.length,
+            }),
+            timeoutPromise,
+          ]) as any;
+          
+          if (reset) {
+            setPosts(Array.isArray(data) ? data : []);
+          } else {
+            setPosts((prev) => [...prev, ...(Array.isArray(data) ? data : [])]);
+          }
+          setHasMore(Array.isArray(data) && data.length === PAGE_SIZE);
+        } catch (basicError) {
+          // Nếu cả hai API đều fail, set empty array và hiển thị error
+          if (reset) {
+            setPosts([]);
+          }
+          setHasMore(false);
+          throw basicError; // Re-throw để vào catch block chính
         }
-        setHasMore(data.length === PAGE_SIZE);
       }
     } catch (error: any) {
+      // Nếu là lần đầu load và có error, set empty array để hiển thị empty state
+      if (reset && posts.length === 0) {
+        setPosts([]);
+      }
       const errorMessage = handleAPIError(error);
-      showToast('Không thể tải bảng tin: ' + errorMessage, 'error');
+      // Chỉ show toast nếu không phải timeout (để tránh spam)
+      if (!errorMessage.includes('timeout')) {
+        showToast('Không thể tải bảng tin: ' + errorMessage, 'error');
+      }
     } finally {
+      // Đảm bảo loading luôn được set về false
       setLoading(false);
       setLoadingMore(false);
       setRefreshing(false);
@@ -501,7 +533,8 @@ const StudentFeed: React.FC<StudentFeedProps> = ({ showToast, onAskWithContext }
     }
   };
 
-  if (loading) {
+  // Hiển thị loading chỉ khi đang load lần đầu và chưa có posts
+  if (loading && posts.length === 0) {
     return <LoadingSpinner size="lg" text="Đang tải bảng tin..." fullScreen={false} />;
   }
 

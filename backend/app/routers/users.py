@@ -2,8 +2,8 @@
 User management API endpoints
 Quản lý users từ Firebase Auth
 """
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, Any, Optional
+from fastapi import APIRouter, HTTPException, Depends, Body
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -46,7 +46,7 @@ async def get_current_user_info(
     try:
         uid = current_user.get("uid")
         if not uid:
-            raise HTTPException(status_code=401, detail="Unauthenticated")
+            raise HTTPException(status_code=401, detail="Unauthenticated: Missing UID")
 
         # Tìm user trong database
         users = db.query("users", filters=[("uid", "==", uid)], limit=1)
@@ -84,7 +84,10 @@ async def get_current_user_info(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in get_current_user_info: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.post("/", response_model=UserResponse)

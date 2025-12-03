@@ -2,7 +2,7 @@
  * User Management - Quản lý users
  */
 import React, { useEffect, useState } from 'react';
-import { Users, Search, Edit2, Trash2, Shield, User, GraduationCap, Crown } from 'lucide-react';
+import { Users, Search, Edit2, Trash2, User as UserIcon, GraduationCap, Crown } from 'lucide-react';
 import { Card, Badge, Button } from '../ui';
 import { adminAPI, User } from '../../services/admin-api';
 import { LoadingSpinner, EmptyState } from '../common';
@@ -68,7 +68,7 @@ const UserManagement: React.FC<{ showToast: (msg: string, type: 'success' | 'err
       case 'teacher':
         return <GraduationCap size={16} className="text-blue-600" />;
       default:
-        return <User size={16} className="text-neutral-600" />;
+        return <UserIcon size={16} className="text-neutral-600" />;
     }
   };
 

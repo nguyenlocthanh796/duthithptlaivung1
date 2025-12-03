@@ -41,6 +41,26 @@ class Settings(BaseSettings):
     # Google Drive (optional)
     GOOGLE_DRIVE_FOLDER_ID: str = ""
     
+    # Firebase Password Hash Config (for user import)
+    # Lưu ý: Không hardcode, dùng environment variables
+    FIREBASE_SIGNER_KEY: str = os.getenv("FIREBASE_SIGNER_KEY", "")
+    FIREBASE_SALT_SEPARATOR: str = os.getenv("FIREBASE_SALT_SEPARATOR", "Bw==")
+    FIREBASE_ROUNDS: int = int(os.getenv("FIREBASE_ROUNDS", "8"))
+    FIREBASE_MEM_COST: int = int(os.getenv("FIREBASE_MEM_COST", "14"))
+    
+    @property
+    def firebase_hash_config(self) -> dict:
+        """Get Firebase password hash config"""
+        if not self.FIREBASE_SIGNER_KEY:
+            return {}
+        return {
+            "algorithm": "SCRYPT",
+            "base64_signer_key": self.FIREBASE_SIGNER_KEY,
+            "base64_salt_separator": self.FIREBASE_SALT_SEPARATOR,
+            "rounds": self.FIREBASE_ROUNDS,
+            "mem_cost": self.FIREBASE_MEM_COST,
+        }
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

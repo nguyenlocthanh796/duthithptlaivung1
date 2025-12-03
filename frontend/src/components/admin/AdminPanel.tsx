@@ -1,9 +1,9 @@
 /**
  * Admin Panel - Trang quản lý admin chính
  */
-import React, { useState } from 'react';
-import { LayoutDashboard, Users, FileText, Settings } from 'lucide-react';
-import { AdminDashboard, UserManagement, PostManagement } from './index';
+import React from 'react';
+import { LayoutDashboard, Users, FileText, Activity } from 'lucide-react';
+import { AdminDashboard, UserManagement, PostManagement, APIStats } from './index';
 
 interface AdminPanelProps {
   showToast: (msg: string, type: 'success' | 'error') => void;
@@ -16,6 +16,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ showToast, activeTab, onTabChan
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'users', label: 'Quản lý Users', icon: Users },
     { id: 'posts', label: 'Quản lý Posts', icon: FileText },
+    { id: 'api', label: 'Thống kê API', icon: Activity },
   ];
 
   return (
@@ -46,6 +47,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ showToast, activeTab, onTabChan
         {activeTab === 'dashboard' && <AdminDashboard showToast={showToast} />}
         {activeTab === 'users' && <UserManagement showToast={showToast} />}
         {activeTab === 'posts' && <PostManagement showToast={showToast} />}
+        {activeTab === 'api' && <APIStats showToast={showToast} />}
       </div>
     </div>
   );

@@ -241,7 +241,10 @@ export async function apiRequest<T>(
   } catch (error: any) {
     // Không log lỗi 404 cho comments endpoint vì có thể post không tồn tại hoặc chưa có comments
     const isComments404 = error.status === 404 && endpoint.includes('/comments');
-    if (!isComments404) {
+    // Không log lỗi 404 cho /api/users/me nếu chưa đăng nhập (có thể endpoint chưa sẵn sàng)
+    const isUsersMe404 = error.status === 404 && endpoint.includes('/api/users/me');
+    
+    if (!isComments404 && !isUsersMe404) {
       // Chỉ log error trong development
       if (import.meta.env.DEV) {
         console.error(`API Error [${method} ${endpoint}]:`, error);

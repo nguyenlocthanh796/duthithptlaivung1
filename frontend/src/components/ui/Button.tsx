@@ -4,7 +4,7 @@ import { LucideIcon } from 'lucide-react';
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'success' | 'error';
   size?: 'sm' | 'md' | 'lg';
-  icon?: LucideIcon;
+  icon?: React.ReactNode | LucideIcon;
   iconPosition?: 'left' | 'right';
   loading?: boolean;
   fullWidth?: boolean;
@@ -47,6 +47,23 @@ const Button: React.FC<ButtonProps> = ({
     ${className}
   `.trim().replace(/\s+/g, ' ');
   
+  const renderIcon = () => {
+    if (!Icon) return null;
+    
+    // Nếu là ReactNode (JSX element)
+    if (React.isValidElement(Icon)) {
+      return <span className="flex-shrink-0">{Icon}</span>;
+    }
+    
+    // Nếu là LucideIcon (function component)
+    if (typeof Icon === 'function') {
+      const IconComponent = Icon as LucideIcon;
+      return <IconComponent size={size === 'sm' ? 16 : size === 'lg' ? 20 : 18} />;
+    }
+    
+    return null;
+  };
+  
   return (
     <button
       className={classes}
@@ -63,9 +80,9 @@ const Button: React.FC<ButtonProps> = ({
         </>
       ) : (
         <>
-          {Icon && iconPosition === 'left' && <Icon size={size === 'sm' ? 16 : size === 'lg' ? 20 : 18} />}
+          {Icon && iconPosition === 'left' && renderIcon()}
           {children}
-          {Icon && iconPosition === 'right' && <Icon size={size === 'sm' ? 16 : size === 'lg' ? 20 : 18} />}
+          {Icon && iconPosition === 'right' && renderIcon()}
         </>
       )}
     </button>
@@ -73,4 +90,3 @@ const Button: React.FC<ButtonProps> = ({
 };
 
 export default Button;
-

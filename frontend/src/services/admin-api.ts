@@ -54,7 +54,7 @@ export const adminAPI = {
     if (params?.role) queryParams.append('role', params.role);
 
     const query = queryParams.toString();
-    return apiRequest<User[]>(`/api/users/${query ? `?${query}` : ''}`, {
+    return apiRequest<User[]>(`/api/users${query ? `?${query}` : ''}`, {
       requireAuth: true,
     });
   },

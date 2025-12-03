@@ -2,7 +2,7 @@
  * Post Management - Quản lý posts
  */
 import React, { useEffect, useState } from 'react';
-import { FileText, Search, Trash2, Check, X, Clock, Filter } from 'lucide-react';
+import { FileText, Search, Trash2, Check, X, Clock } from 'lucide-react';
 import { Card, Badge, Button } from '../ui';
 import { adminAPI } from '../../services/admin-api';
 import { LoadingSpinner, EmptyState } from '../common';
@@ -189,7 +189,7 @@ const PostManagement: React.FC<{ showToast: (msg: string, type: 'success' | 'err
                   {post.status === 'approved' && (
                     <Button
                       size="sm"
-                      variant="warning"
+                      variant="secondary"
                       icon={<Clock size={14} />}
                       onClick={() => void handleUpdateStatus(post.id, 'pending')}
                     >

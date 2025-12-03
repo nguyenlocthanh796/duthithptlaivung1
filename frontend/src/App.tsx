@@ -37,16 +37,56 @@ interface ToastState {
 
 // Main App Content Component (sau khi đã authenticated)
 const AppContent: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, currentUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
-  const { currentUser } = useAuth();
   const [role, setRole] = useState<string>('student');
+  const [userRole, setUserRole] = useState<string>('student');
   const [activeTab, setActiveTab] = useState<string>('feed');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [anhThoContext, setAnhThoContext] = useState<string>('');
+
+  // Load user role từ backend
+  useEffect(() => {
+    const loadUserRole = async () => {
+      if (!currentUser) {
+        setUserRole('student');
+        return;
+      }
+      
+      try {
+        // Đợi một chút để đảm bảo token đã sẵn sàng
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const { usersAPI } = await import('./services/users-api');
+        const userInfo = await usersAPI.getMe();
+        const userRoleFromBackend = userInfo.role || 'student';
+        setUserRole(userRoleFromBackend);
+        
+        // Auto-set role nếu URL là admin nhưng role chưa đúng
+        if (location.pathname.startsWith('/admin/') && userRoleFromBackend === 'admin' && role !== 'admin') {
+          setRole('admin');
+        }
+        // Nếu đang ở admin route nhưng không phải admin, redirect
+        else if (location.pathname.startsWith('/admin/') && userRoleFromBackend !== 'admin') {
+          setRole('student');
+          navigate('/student/feed');
+        }
+      } catch (error: any) {
+        // Chỉ log error nếu không phải 401 (unauthorized) - có thể user chưa đăng nhập
+        if (error?.status !== 401 && error?.status !== 404) {
+          console.error('Error loading user role:', error);
+        }
+        // Nếu 404, có thể endpoint chưa sẵn sàng hoặc backend chưa khởi động
+        // Set default role và tiếp tục
+        setUserRole('student');
+      }
+    };
+    
+    void loadUserRole();
+  }, [currentUser, location.pathname]);
 
   // Sync URL với activeTab
   useEffect(() => {
@@ -268,7 +308,7 @@ const AppContent: React.FC = () => {
             </>
           )}
 
-          {role === 'admin' && (
+          {role === 'admin' && userRole === 'admin' && (
             <Suspense fallback={<LoadingFallback />}>
               <AdminPanel
                 showToast={showToast}
@@ -276,6 +316,22 @@ const AppContent: React.FC = () => {
                 onTabChange={handleTabChange}
               />
             </Suspense>
+          )}
+          
+          {role === 'admin' && userRole !== 'admin' && (
+            <Card className="p-8 text-center">
+              <h2 className="text-2xl font-bold text-neutral-900 mb-4">Không có quyền truy cập</h2>
+              <p className="text-neutral-600 mb-4">Bạn cần có quyền admin để truy cập trang này.</p>
+              <button
+                onClick={() => {
+                  setRole('student');
+                  navigate('/student/feed');
+                }}
+                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                Về trang chủ
+              </button>
+            </Card>
           )}
           </div>
         </main>
